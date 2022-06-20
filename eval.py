@@ -1,3 +1,4 @@
+
 import os
 import time
 import pickle
@@ -20,41 +21,21 @@ from utils.loss import WeightedFocalLoss, DiceLoss
 from torchvision.ops import sigmoid_focal_loss
 
 
-def train(train_loader, model, optimizer, loss_fn, epochs, checkpoint_dir, writer):
-    for epoch in tqdm(range(1, epochs+1)):
-        model.train(True)
-        running_loss = 0.
-        dice_loss = 0.
-        focal_loss = 0.
-        pbar = tqdm(train_loader)
-        for _, data in enumerate(pbar):
-            optimizer.zero_grad()
-            img = data['image'].cuda()
-            mask = data['mask'].cuda()
+def eval(data_loader, model, eval_dir):
+    model.eval()
+    test_image_savepath = os.path.join(eval_dir, "images")
+    if not os.path.isdir(test_image_savepath):
+        os.makedirs(test_image_savepath)
+    pbar = tqdm(data_loader)
+    for _, data in enumerate(pbar):
+        img = data['image'].cuda()
+        # lab = data['mask'].cuda()
+        name = data['name']
+        outimg_f = os.path.join(test_image_savepath, f"testout_{name}.png")
+        with torch.no_grad():
             inp_logits = model(img)
-            loss1 = loss_fn(inp_logits, mask)
-            loss2 = sigmoid_focal_loss(inp_logits, mask, reduction='mean')
-            loss = loss1 + loss2
-            loss.backward()
-            optimizer.step()
-            running_loss += loss.item()
-            dice_loss += loss1.item()
-            focal_loss += loss2.item()
-
-        writer.add_scalar("Loss/overall", running_loss, epoch)
-        writer.add_scalar("Loss/dice", dice_loss, epoch)
-        writer.add_scalar("Loss/focal", focal_loss, epoch)
-
-        print(f"Epoch:{epoch} | Running Loss:{running_loss}")
-        latest_model = f"model_checkpoint_latest.pth"
-        torch.save(model.state_dict(), os.path.join(
-            checkpoint_dir, latest_model))
-        if epoch >= 20 and epoch % 20 == 0:
-            saved_model = f"model_checkpoint_{epoch}.pth"
-            print(f"Saving model: {saved_model}")
-            torch.save(model.state_dict(), os.path.join(
-                checkpoint_dir, saved_model))
-    writer.flush()
+            output = torch.sigmoid(inp_logits).data.cpu().numpy().squeeze()
+        imageio.imsave(outimg_f, img_as_ubyte(output))
 
 
 def main(args):
@@ -94,20 +75,18 @@ def main(args):
     classes = 1
     model = Unet2D(channels, num_class=classes)
     model = model.cuda()
-    params = model.parameters()
-    optimizer = torch.optim.Adam(params, learning_rate)
-    # criterion = torch.nn.BCEWithLogitsLoss()
-    # criterion = WeightedFocalLoss(alpha=[50, 0.75])
-    criterion = DiceLoss()
+    load_epoch = 'latest'
+    model_path = os.path.join(
+        checkpt_dir, f"model_checkpoint_{load_epoch}.pth")
+    model.load_state_dict(torch.load(model_path))
 
     trn_img_dir = os.path.join(train_data_dir, "images")
     trn_lab_dir = os.path.join(train_data_dir, "labels")
-    train_loader = sk_loader(trn_img_dir, trn_lab_dir,
-                             batch_size=batch_size, debug=if_debug, num_debug=n_debug)
-    print("Begin Training.......")
-    writer = SummaryWriter(experiment_dir)
-    train(train_loader, model, optimizer,
-          criterion, num_epochs, checkpt_dir, writer)
+    eval_loader = sk_loader(trn_img_dir, trn_lab_dir,
+                            batch_size=1, debug=if_debug, num_debug=n_debug)
+
+    print("Evaluating model on training set....")
+    eval(eval_loader, model, eval_dir)
 
 
 if __name__ == "__main__":
