@@ -18,12 +18,13 @@ import imageio
 from models import Unet2D_simple as Unet2D
 from utils.data import sk_loader
 from utils.loss import WeightedFocalLoss, DiceLoss
+import utils.misc as workspace
 from torchvision.ops import sigmoid_focal_loss
 
 
-def eval(data_loader, model, eval_dir):
+def eval(data_loader, model, exp_dir):
     model.eval()
-    test_image_savepath = os.path.join(eval_dir, "images")
+    test_image_savepath = os.path.join(workspace.get_dir(exp_dir, workspace.evaluation_subdir), "images")
     if not os.path.isdir(test_image_savepath):
         os.makedirs(test_image_savepath)
     pbar = tqdm(data_loader)
@@ -39,7 +40,6 @@ def eval(data_loader, model, eval_dir):
 
 
 def main(args):
-
     np.random.seed(2020)
     torch.manual_seed(2020)
     torch.cuda.manual_seed(2020)
@@ -48,14 +48,7 @@ def main(args):
         print(f"[ERROR] Experiment dir {args.exp_dir} does not exist!")
         sys.exit(0)
     experiment_dir = args.exp_dir
-
-    # Setup the checkpoint and model eval dirs in exp_dir
-    checkpt_dir = os.path.join(experiment_dir, "checkpoints")
-    eval_dir = os.path.join(experiment_dir, "evals")
-    if not os.path.isdir(checkpt_dir):
-        os.makedirs(checkpt_dir)
-    if not os.path.isdir(eval_dir):
-        os.makedirs(eval_dir)
+    checkpoint = args.checkpoint
 
     with open(os.path.join(experiment_dir, "specs.json"), "r") as f:
         specs = json.load(f)
@@ -71,14 +64,12 @@ def main(args):
     print(f"Training data dir: {train_data_dir}")
 
     # channels = (1, 64, 128, 256, 512, 1024)
+    # model = Unet2D(**specs["NetworkSpecs"])
     channels = 1
     classes = 1
     model = Unet2D(channels, num_class=classes)
     model = model.cuda()
-    load_epoch = 'latest'
-    model_path = os.path.join(
-        checkpt_dir, f"model_checkpoint_{load_epoch}.pth")
-    model.load_state_dict(torch.load(model_path))
+    workspace.load_model_checkpoint(experiment_dir, checkpoint, model)
 
     trn_img_dir = os.path.join(train_data_dir, "images")
     trn_lab_dir = os.path.join(train_data_dir, "labels")
@@ -86,7 +77,7 @@ def main(args):
                             batch_size=1, debug=if_debug, num_debug=n_debug)
 
     print("Evaluating model on training set....")
-    eval(eval_loader, model, eval_dir)
+    eval(eval_loader, model, experiment_dir)
 
 
 if __name__ == "__main__":
@@ -94,5 +85,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp_dir', '-e', type=str,
                         default="./experiments/init_run/", help="Path to hyperparams dir.")
+    parser.add_argument('--checkpoint', '-c', type=str,
+                        default="latest", help="Which checkpoint to eval on?")
     args = parser.parse_args()
     main(args)

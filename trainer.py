@@ -15,12 +15,14 @@ from skimage import img_as_ubyte
 import imageio
 
 from models import Unet2D_simple as Unet2D
+# from models import Unet2D_fancy as Unet2D
 from utils.data import sk_loader
 from utils.loss import WeightedFocalLoss, DiceLoss
+import utils.misc as workspace
 from torchvision.ops import sigmoid_focal_loss
 
 
-def train(train_loader, model, optimizer, loss_fn, epochs, checkpoint_dir, save_every, writer):
+def train(train_loader, model, optimizer, loss_fn, epochs, exp_dir, save_every, writer):
     for epoch in tqdm(range(1, epochs+1)):
         model.train(True)
         running_loss = 0.
@@ -46,14 +48,9 @@ def train(train_loader, model, optimizer, loss_fn, epochs, checkpoint_dir, save_
         writer.add_scalar("Loss/focal", focal_loss, epoch)
 
         print(f"Epoch:{epoch} | Running Loss:{running_loss}")
-        latest_model = f"model_checkpoint_latest.pth"
-        torch.save(model.state_dict(), os.path.join(
-            checkpoint_dir, latest_model))
+        workspace.save_latest(exp_dir, epoch, model, optimizer)
         if epoch % save_every == 0:
-            saved_model = f"model_checkpoint_{epoch}.pth"
-            print(f"Saving model: {saved_model}")
-            torch.save(model.state_dict(), os.path.join(
-                checkpoint_dir, saved_model))
+            workspace.save_checkpoint(exp_dir, epoch, model, optimizer)
     writer.flush()
 
 
@@ -69,8 +66,8 @@ def main(args):
     experiment_dir = args.exp_dir
 
     # Setup the checkpoint and model eval dirs in exp_dir
-    checkpt_dir = os.path.join(experiment_dir, "checkpoints")
-    eval_dir = os.path.join(experiment_dir, "evals")
+    checkpt_dir = os.path.join(experiment_dir, workspace.checkpoint_subdir)
+    eval_dir = os.path.join(experiment_dir, workspace.evaluation_subdir)
     if not os.path.isdir(checkpt_dir):
         os.makedirs(checkpt_dir)
     if not os.path.isdir(eval_dir):
@@ -81,7 +78,7 @@ def main(args):
     train_data_dir = specs["DataSource"]
     learning_rate = specs["LearningRate"]
     num_epochs = specs["Epochs"]
-    model_save = specs["SaveEvery"]
+    save_epoch = specs["SaveEvery"]
     batch_size = specs["BatchSize"]
     if_debug = specs["Debug"]
     n_debug = specs["NumDebug"]
@@ -94,6 +91,7 @@ def main(args):
     channels = 1
     classes = 1
     model = Unet2D(channels, num_class=classes)
+    # model = Unet2D(**specs["NetworkSpecs"])
     model = model.cuda()
     params = model.parameters()
     optimizer = torch.optim.Adam(params, learning_rate)
@@ -108,7 +106,7 @@ def main(args):
     print("Begin Training.......")
     writer = SummaryWriter(experiment_dir)
     train(train_loader, model, optimizer,
-          criterion, num_epochs, checkpt_dir, model_save, writer)
+          criterion, num_epochs, experiment_dir, save_epoch, writer)
 
 
 if __name__ == "__main__":
