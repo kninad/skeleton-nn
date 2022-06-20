@@ -20,7 +20,7 @@ from utils.loss import WeightedFocalLoss, DiceLoss
 from torchvision.ops import sigmoid_focal_loss
 
 
-def train(train_loader, model, optimizer, loss_fn, epochs, checkpoint_dir, writer):
+def train(train_loader, model, optimizer, loss_fn, epochs, checkpoint_dir, save_every, writer):
     for epoch in tqdm(range(1, epochs+1)):
         model.train(True)
         running_loss = 0.
@@ -49,7 +49,7 @@ def train(train_loader, model, optimizer, loss_fn, epochs, checkpoint_dir, write
         latest_model = f"model_checkpoint_latest.pth"
         torch.save(model.state_dict(), os.path.join(
             checkpoint_dir, latest_model))
-        if epoch >= 20 and epoch % 20 == 0:
+        if epoch % save_every == 0:
             saved_model = f"model_checkpoint_{epoch}.pth"
             print(f"Saving model: {saved_model}")
             torch.save(model.state_dict(), os.path.join(
@@ -81,6 +81,7 @@ def main(args):
     train_data_dir = specs["DataSource"]
     learning_rate = specs["LearningRate"]
     num_epochs = specs["Epochs"]
+    model_save = specs["SaveEvery"]
     batch_size = specs["BatchSize"]
     if_debug = specs["Debug"]
     n_debug = specs["NumDebug"]
@@ -107,7 +108,7 @@ def main(args):
     print("Begin Training.......")
     writer = SummaryWriter(experiment_dir)
     train(train_loader, model, optimizer,
-          criterion, num_epochs, checkpt_dir, writer)
+          criterion, num_epochs, checkpt_dir, model_save, writer)
 
 
 if __name__ == "__main__":
