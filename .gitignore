@@ -1,8 +1,8 @@
 # Custom ignore
 
-data/*
-experiments/*
-
+data/
+experiments/
+.vscode/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
