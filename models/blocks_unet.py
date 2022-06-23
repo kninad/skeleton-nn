@@ -2,7 +2,7 @@ from mimetypes import init
 from turtle import forward
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as nnFunc
 
 
 class ConvBlock(nn.Module):
@@ -48,7 +48,7 @@ class UpBlock(nn.Module):
         x1 = self.upsample(x1)
         deltaX = x2.size()[-2] - x1.size()[-2]
         deltaY = x2.size()[-1] - x1.size()[-1]
-        x1 = F.pad(x1, (deltaX//2, deltaX - deltaX //
+        x1 = nnFunc.pad(x1, (deltaX//2, deltaX - deltaX //
                    2, deltaY//2, deltaY - deltaY//2))
         x = torch.cat([x2, x1], dim=1)
         x = self.conv_block(x)

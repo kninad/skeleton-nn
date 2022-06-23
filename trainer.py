@@ -15,7 +15,6 @@ from skimage import img_as_ubyte
 import imageio
 
 from models import Unet2D_simple as Unet2D
-# from models import Unet2D_fancy as Unet2D
 from utils.data import sk_loader
 from utils.loss import WeightedFocalLoss, DiceLoss
 import utils.misc as workspace
@@ -28,8 +27,7 @@ def train(train_loader, model, optimizer, loss_fn, epochs, exp_dir, save_every, 
         running_loss = 0.
         dice_loss = 0.
         focal_loss = 0.
-        pbar = tqdm(train_loader)
-        for _, data in enumerate(pbar):
+        for data in tqdm(train_loader):
             optimizer.zero_grad()
             img = data['image'].cuda()
             mask = data['mask'].cuda()
@@ -62,7 +60,7 @@ def main(args):
 
     if not os.path.isdir(args.exp_dir):
         print(f"[ERROR] Experiment dir {args.exp_dir} does not exist!")
-        sys.exit(0)
+        return 0
     experiment_dir = args.exp_dir
 
     # Setup the checkpoint and model eval dirs in exp_dir
@@ -82,26 +80,31 @@ def main(args):
     batch_size = specs["BatchSize"]
     if_debug = specs["Debug"]
     n_debug = specs["NumDebug"]
-
+    loss_func = specs["LossFunction"]
     print(
         f'Learning Rate:{learning_rate} | Epochs:{num_epochs} | BatchSize:{batch_size}')
     print(f"Training data dir: {train_data_dir}")
 
-    # channels = (1, 64, 128, 256, 512, 1024)
     channels = 1
     classes = 1
     model = Unet2D(channels, num_class=classes)
-    # model = Unet2D(**specs["NetworkSpecs"])
     model = model.cuda()
     params = model.parameters()
     optimizer = torch.optim.Adam(params, learning_rate)
-    # criterion = torch.nn.BCEWithLogitsLoss()
-    # criterion = WeightedFocalLoss(alpha=[50, 0.75])
-    criterion = DiceLoss()
+    
+    if loss_func == "Dice":
+        print("Using the DiceLoss as the loss function")
+        criterion = DiceLoss()
+    elif loss_func == "BCE":
+        print("Using the BCEWithLogits as the loss function")
+        criterion = torch.nn.BCEWithLogitsLoss()
+    else:
+        print("Loss function specified in experiment specs.json is not recognized!")
+        return 0
 
-    trn_img_dir = os.path.join(train_data_dir, "images")
-    trn_lab_dir = os.path.join(train_data_dir, "labels")
-    train_loader = sk_loader(trn_img_dir, trn_lab_dir,
+    trn_images_dir = os.path.join(train_data_dir, "images")
+    trn_labels_dir = os.path.join(train_data_dir, "labels")
+    train_loader = sk_loader(trn_images_dir, trn_labels_dir,
                              batch_size=batch_size, debug=if_debug, num_debug=n_debug)
     print("Begin Training.......")
     writer = SummaryWriter(experiment_dir)
@@ -110,7 +113,6 @@ def main(args):
 
 
 if __name__ == "__main__":
-    # init parameters
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp_dir', '-e', type=str,
                         default="./experiments/init_run/", help="Path to hyperparams dir.")

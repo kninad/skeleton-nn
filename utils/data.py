@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, RandomSampler, Subset
 from torchvision import transforms
 
 
-def get_rsz_transform(resize: int):
+def get_resize_transform(resize: int):
     return transforms.Compose([
         transforms.Resize(resize, resize),
         transforms.ToTensor(),
@@ -31,11 +31,11 @@ class Skel2dDataset(torch.utils.data.Dataset):
         self.masks_dir = Path(masks_dir)
         self.resize = resize
         self.load_in_ram = load_in_ram
-        self.transform = get_rsz_transform(
+        self.transform = get_resize_transform(
             resize) if self.resize else get_basic_transform()
         self.ids = [splitext(file)[0] for file in listdir(images_dir)]
         self.ids.sort() # FOR consistency
-        if not self.ids:  # or not self.mask_ids:
+        if not self.ids:
             raise RuntimeError(
                 f'No image/mask files found in {images_dir} or {masks_dir}!!')
         logging.info(f'Creating dataset with {len(self.ids)} examples')
@@ -47,7 +47,6 @@ class Skel2dDataset(torch.utils.data.Dataset):
             self.masks = []
             self.images = []
             for mask_f, img_f in mask_img_pairs:
-                # print(mask_f[0], img_f[0])
                 self.masks.append(self.load_img(mask_f[0]))
                 self.images.append(self.load_img(img_f[0]))
 
