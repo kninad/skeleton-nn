@@ -1,0 +1,15 @@
+<s-rep>
+  <nRows>5</nRows>
+  <nCols>9</nCols>
+  <meshType>Quad</meshType>
+  <color>
+    <red>0</red>
+    <green>0.5</green>
+    <blue>0</blue>
+  </color>
+  <isMean>False</isMean>
+  <meanStatPath/>
+  <upSpoke>/work/salt/srep/data/template/up.vtp</upSpoke>
+  <downSpoke>/work/salt/srep/data/template/down.vtp</downSpoke>
+  <crestSpoke>/work/salt/srep/data/template/crest.vtp</crestSpoke>
+</s-rep>
