@@ -1,4 +1,20 @@
+from monai.transforms import (
+    AddChanneld,
+    Compose,
+    CropForegroundd,
+    LoadImage,
+    LoadImaged,
+    Orientationd,
+    RandCropByPosNegLabeld,
+    ScaleIntensityRanged,
+    Spacingd,
+    ToTensord,
+    Resized,
+)
+from typing import List
 import logging
+import os
+import glob
 from os import listdir
 from os.path import splitext
 from pathlib import Path
@@ -6,8 +22,15 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 import torch
-from torch.utils.data import DataLoader, RandomSampler, Subset
+import torch.utils.data
 from torchvision import transforms
+
+from monai.data import DataLoader, Dataset
+from monai.utils import first
+from monai.data import CacheDataset
+
+from monai.utils import set_determinism
+set_determinism(seed=0)
 
 
 def get_resize_transform(resize: int):
@@ -34,12 +57,12 @@ class Skel2dDataset(torch.utils.data.Dataset):
         self.transform = get_resize_transform(
             resize) if self.resize else get_basic_transform()
         self.ids = [splitext(file)[0] for file in listdir(images_dir)]
-        self.ids.sort() # FOR consistency
+        self.ids.sort()  # FOR consistency
         if not self.ids:
             raise RuntimeError(
                 f'No image/mask files found in {images_dir} or {masks_dir}!!')
         logging.info(f'Creating dataset with {len(self.ids)} examples')
-        
+
         # Can preprocess the data and load it into RAM here.
         if self.load_in_ram:
             mask_img_pairs = [self.get_img_and_mask(
@@ -82,7 +105,7 @@ class Skel2dDataset(torch.utils.data.Dataset):
 
         img = self.transform(img)
         mask = self.transform(mask)
-        name = self.ids[idx]          
+        name = self.ids[idx]
 
         return {
             'image': img,
@@ -94,16 +117,53 @@ class Skel2dDataset(torch.utils.data.Dataset):
 def sk_loader(im_root, gt_root, batch_size=4, shuffle=True, num_worker=2, pin_memory=False, debug=False, num_debug=10):
     dataset = Skel2dDataset(im_root, gt_root)
     if debug and num_debug > 0:
-        subset_ds = Subset(dataset, np.arange(num_debug))
-        data_loader = DataLoader(dataset=subset_ds,
-                                batch_size=batch_size,
-                                shuffle=shuffle,
-                                num_workers=num_worker,
-                                pin_memory=pin_memory)
+        subset_ds = torch.utils.data.Subset(dataset, np.arange(num_debug))
+        data_loader = torch.utils.data.DataLoader(dataset=subset_ds,
+                                                  batch_size=batch_size,
+                                                  shuffle=shuffle,
+                                                  num_workers=num_worker,
+                                                  pin_memory=pin_memory)
     else:
-        data_loader = DataLoader(dataset=dataset,
-                                batch_size=batch_size,
-                                shuffle=shuffle,
-                                num_workers=num_worker,
-                                pin_memory=pin_memory)
+        data_loader = torch.utils.data.DataLoader(dataset=dataset,
+                                                  batch_size=batch_size,
+                                                  shuffle=shuffle,
+                                                  num_workers=num_worker,
+                                                  pin_memory=pin_memory)
     return data_loader
+
+
+def get_surf_srep_split(data_dir: str, validation_frac=0.1, test_frac=0.1, 
+                        random_shuffle=False, debug=False) -> List[dict]:
+    images = sorted(glob.glob(os.path.join(data_dir, "surf_*.nrrd")))
+    labels = sorted(glob.glob(os.path.join(data_dir, "srep_*.nrrd")))
+    data_dicts = [
+        {"image": image_name, "label": label_name}
+        for image_name, label_name in zip(images, labels)
+    ]
+
+    if debug:
+        data_dicts = data_dicts[:10]
+        random_shuffle = False
+
+    test_size = int(test_frac * len(data_dicts))
+    validation_size = int(validation_frac * len(data_dicts))
+    # indices = np.arange(len(data_dicts))
+    # if random_shuffle:
+    #     np.random.shuffle(indices)
+    indices = list(range(len(data_dicts)))
+    test_idxs = indices[:test_size]
+    validation_idxs = indices[test_size: test_size + validation_size]
+    train_idxs = indices[test_size + validation_size:]
+    # print(test_size, validation_size)
+    # print(test_idxs, validation_idxs, train_idxs)
+    return data_dicts[test_size + validation_size:], data_dicts[test_size: test_size + validation_size], data_dicts[:test_size]
+
+def get_srep_data_transform(resize_shape=(224, 224, 224)):
+    return Compose(
+    [
+        LoadImaged(keys=["image", "label"]),
+        AddChanneld(keys=["image", "label"]),
+        Resized(keys=["image", "label"], spatial_size=resize_shape),
+        ToTensord(keys=["image", "label"]),
+    ]
+)
