@@ -1,3 +1,4 @@
+from cProfile import label
 from monai.transforms import (
     AddChanneld,
     Compose,
@@ -136,6 +137,8 @@ def get_surf_srep_split(data_dir: str, validation_frac=0.1, test_frac=0.1,
                         random_shuffle=False, debug=False) -> List[dict]:
     images = sorted(glob.glob(os.path.join(data_dir, "surf_*.nrrd")))
     labels = sorted(glob.glob(os.path.join(data_dir, "srep_*.nrrd")))
+    if (len(images) != len(labels)) or len(images) == 0 or len(labels) == 0:
+        raise AssertionError('Check the data directory for equal number of data and label files!')
     data_dicts = [
         {"image": image_name, "label": label_name}
         for image_name, label_name in zip(images, labels)

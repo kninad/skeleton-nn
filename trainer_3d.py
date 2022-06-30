@@ -26,12 +26,11 @@ import utils.misc as workspace
 
 
 def train(train_loader, model, optimizer, loss_fn1, loss_fn2,  epochs, 
-            exp_dir, save_every):
+            exp_dir, save_every, device):
     print("Begin Training.......")
-    writer = SummaryWriter(exp_dir)
+    writer = SummaryWriter(os.path.join(exp_dir, "tb_logs"))
 
     epoch_loss_values = list()
-    device = torch.device("cuda:0")
 
     for epoch in tqdm(range(1, epochs+1)):
         print("-" * 10)
@@ -51,7 +50,6 @@ def train(train_loader, model, optimizer, loss_fn1, loss_fn2,  epochs,
                 batch_data["label"].to(device),
             )
             optimizer.zero_grad()
-            print(inputs.shape)
             outputs = model(inputs)
             loss_dice = loss_fn1(outputs, labels)
             loss_focal = loss_fn2(outputs, labels)
@@ -102,12 +100,17 @@ def main(args):
     with open(os.path.join(experiment_dir, "specs.json"), "r") as f:
         specs = json.load(f)
     train_data_dir = specs["DataSource"]
+    if not os.path.isdir(train_data_dir):
+        print(f"The provided data dir in specs.json is invalid! {train_data_dir} is not found on this system.")
+        return 0
+
     learning_rate = specs["LearningRate"]
     num_epochs = specs["Epochs"]
     save_epoch = specs["SaveEvery"]
     batch_size = specs["BatchSize"]
     if_debug = specs["Debug"]
     resize_shape = specs["ResizeShape"]
+    num_data_loaders = specs["NumDataLoaders"]
     print(
         f'Learning Rate:{learning_rate} | Epochs:{num_epochs} | BatchSize:{batch_size}')
     print(f"Training data dir: {train_data_dir}")
@@ -115,25 +118,31 @@ def main(args):
     data_transforms = get_srep_data_transform((resize_shape, resize_shape, resize_shape))
     trn_files, _, _ = get_surf_srep_split(train_data_dir, random_shuffle=False, debug=if_debug)
 
-    trn_ds = CacheDataset(data=trn_files, transform=data_transforms, cache_rate=0.1, num_workers=4)
-    trn_loader = DataLoader(trn_ds, batch_size=batch_size, shuffle=True, num_workers=4)
+    trn_ds = CacheDataset(data=trn_files, transform=data_transforms, cache_rate=0.5, num_workers=num_data_loaders)
+    trn_loader = DataLoader(trn_ds, batch_size=batch_size, shuffle=True, num_workers=num_data_loaders)
     
-    device = torch.device("cuda:0")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
     model = UNet(
         dimensions=3,
         in_channels=1,
         out_channels=1,
-        channels=(16, 32, 64, 128),
-        strides=(2, 2, 2),
+        channels=(16, 32, 64, 128, 256),
+        strides=(2, 2, 2, 2),
         num_res_units=2,
         norm=Norm.BATCH,
     ).to(device)
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+        model = nn.DataParallel(model).cuda()
+    
     criterion1 = DiceLoss(sigmoid=True)
     criterion2 = FocalLoss()
     optimizer = torch.optim.Adam(model.parameters(), 1e-4)
 
     train(trn_loader, model, optimizer,
-          criterion1, criterion2, num_epochs, experiment_dir, save_epoch)
+          criterion1, criterion2, num_epochs, experiment_dir, save_epoch, device)
 
 
 if __name__ == "__main__":
