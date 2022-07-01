@@ -51,8 +51,9 @@ def save_optimizer(exp_dir, fname, optimizer, epoch):
     )
 
 
-def load_optimizer(exp_dir, fname, optimizer):
-    state_f = os.path.join(get_dir(exp_dir, optim_param_subdir), fname)
+def load_optimizer(exp_dir, checkpoint, optimizer):
+    state_f = os.path.join(get_dir(exp_dir, optim_param_subdir),
+                            f"optimizer_{checkpoint}.pth")
     if not os.path.isfile(state_f):
         raise Exception(f'optimizer state dict "{state_f}" does not exist')
     data = torch.load(state_f)
