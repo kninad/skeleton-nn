@@ -21,7 +21,7 @@ from monai.inferers import sliding_window_inference
 from monai.metrics import compute_meandice
 from monai.transforms import AsDiscrete
 
-from utils.data import get_surf_srep_split, get_srep_data_transform
+from utils.data import get_surf_srep_split, get_srep_data_transform, get_aug_transform
 import utils.misc as workspace
 
 
@@ -115,8 +115,9 @@ def main(args):
         f'Learning Rate:{learning_rate} | Epochs:{num_epochs} | BatchSize:{batch_size}')
     print(f"Training data dir: {train_data_dir}")
 
-    data_transforms = get_srep_data_transform(
-        (resize_shape, resize_shape, resize_shape))
+    # data_transforms = get_srep_data_transform((resize_shape, resize_shape, resize_shape))
+    data_transforms = get_aug_transform(resize_shape=(resize_shape, resize_shape, resize_shape))
+    
     trn_files, _, _ = get_surf_srep_split(
         train_data_dir, random_shuffle=False, debug=if_debug)
 

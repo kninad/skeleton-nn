@@ -11,6 +11,9 @@ from monai.transforms import (
     Spacingd,
     ToTensord,
     Resized,
+    RandZoomd,
+    RandFlipd,
+    RandRotate90d,
 )
 from typing import List
 import logging
@@ -133,12 +136,13 @@ def sk_loader(im_root, gt_root, batch_size=4, shuffle=True, num_worker=2, pin_me
     return data_loader
 
 
-def get_surf_srep_split(data_dir: str, validation_frac=0.1, test_frac=0.1, 
+def get_surf_srep_split(data_dir: str, validation_frac=0.1, test_frac=0.1,
                         random_shuffle=False, debug=False) -> List[dict]:
     images = sorted(glob.glob(os.path.join(data_dir, "surf_*.nrrd")))
     labels = sorted(glob.glob(os.path.join(data_dir, "srep_*.nrrd")))
     if (len(images) != len(labels)) or len(images) == 0 or len(labels) == 0:
-        raise AssertionError('Check the data directory for equal number of data and label files!')
+        raise AssertionError(
+            'Check the data directory for equal number of data and label files!')
     data_dicts = [
         {"image": image_name, "label": label_name}
         for image_name, label_name in zip(images, labels)
@@ -161,12 +165,48 @@ def get_surf_srep_split(data_dir: str, validation_frac=0.1, test_frac=0.1,
     # print(test_idxs, validation_idxs, train_idxs)
     return data_dicts[test_size + validation_size:], data_dicts[test_size: test_size + validation_size], data_dicts[:test_size]
 
+
 def get_srep_data_transform(resize_shape=(224, 224, 224)):
     return Compose(
-    [
-        LoadImaged(keys=["image", "label"]),
-        AddChanneld(keys=["image", "label"]),
-        Resized(keys=["image", "label"], spatial_size=resize_shape),
-        ToTensord(keys=["image", "label"]),
-    ]
-)
+        [
+            LoadImaged(keys=["image", "label"]),
+            AddChanneld(keys=["image", "label"]),
+            Resized(keys=["image", "label"], spatial_size=resize_shape),
+            ToTensord(keys=["image", "label"]),
+        ]
+    )
+
+
+def get_aug_transform(resize_shape=(224, 224, 224), num_crop=4):
+    return Compose(
+        [
+            LoadImaged(keys=["image", "label"]),
+            AddChanneld(keys=["image", "label"]),
+            RandZoomd(keys=["image", "label"], prob=0.2, min_zoom=0.6, max_zoom=1.2),
+            CropForegroundd(keys=["image", "label"], source_key="image"),
+            RandCropByPosNegLabeld(keys=["image", "label"], label_key="label",
+                spatial_size=resize_shape, pos=1, neg=1, num_samples=num_crop,
+                image_key="image", image_threshold=1e-3),
+            RandFlipd(
+                keys=["image", "label"],
+                spatial_axis=[0],
+                prob=0.10,
+            ),
+            RandFlipd(
+                keys=["image", "label"],
+                spatial_axis=[1],
+                prob=0.10,
+            ),
+            RandFlipd(
+                keys=["image", "label"],
+                spatial_axis=[2],
+                prob=0.10,
+            ),
+            RandRotate90d(
+                keys=["image", "label"],
+                prob=0.10,
+                max_k=3,
+            ),
+            Resized(keys=["image", "label"], spatial_size=resize_shape),
+        ]
+    )
