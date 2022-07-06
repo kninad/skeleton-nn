@@ -32,12 +32,11 @@ def center_and_align(surf_pts, srep_pts):
     return surf_pts_align, srep_pts_align
 
 
-def scale_along_axes(surf_pts, srep_pts):
+def scale_along_axes(surf_pts, srep_pts, scale_std=0.15):
     # Apply scaling
     # Expects the surf_pts and srep_pts to be aligned and centered.
-    xscale = np.random.normal(1.0, 0.15)
-    yscale = np.random.normal(1.0, 0.15)
-    zscale = np.random.normal(1.0, 0.15)
+    axis_scales = np.abs(np.random.normal(1.0, scale_std, size=3))
+    xscale, yscale, zscale = axis_scales[0], axis_scales[1], axis_scales[2]
     surf_pts_scaled = np.zeros(surf_pts.shape)
     surf_pts_scaled[:, 0] = surf_pts[:, 0]*xscale
     surf_pts_scaled[:, 1] = surf_pts[:, 1]*yscale
@@ -52,10 +51,10 @@ def scale_along_axes(surf_pts, srep_pts):
     return surf_pts_scaled, srep_pts_scaled, axis_scales
 
 
-def bend_and_twist(surf_pts_scaled, srep_pts_scaled):
+def bend_and_twist(surf_pts_scaled, srep_pts_scaled, std_th=np.pi/12, std_ph=np.pi/8):
     # Apply bending/twisting
-    th = np.random.normal(np.pi/6, np.pi/12)
-    ph = np.random.normal(np.pi/3, np.pi/8)
+    th = np.random.normal(np.pi/3, std_th)
+    ph = np.random.normal(np.pi/3, std_ph)
 
     xmax = np.max(surf_pts_scaled[:, 0])
     xmin = np.min(surf_pts_scaled[:, 0])
@@ -95,7 +94,8 @@ def bend_and_twist(surf_pts_scaled, srep_pts_scaled):
     return surf_pts_bt, srep_pts_bt, th, ph
 
 
-def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000):
+def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000, 
+                                    scale_std=0.15, th_std=np.pi/12, ph_std=np.pi/8):
     ellipsoid_spharm_f = os.path.join(template_dir, 'ellipsoid_SPHARM.vtk')
     srep_f = os.path.join(template_dir, 'srep_upsampled.vtp')
     surf_reader = vtk.vtkPolyDataReader()
@@ -115,9 +115,9 @@ def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000):
 
     for idx in tqdm(range(1, count+1)):
         surf_pts_scaled, srep_pts_scaled, axis_scales = scale_along_axes(
-            surf_pts_align, srep_pts_align)
+            surf_pts_align, srep_pts_align, scale_std)
         surf_pts_bt, srep_pts_bt, th, ph = bend_and_twist(
-            surf_pts_scaled, srep_pts_scaled)
+            surf_pts_scaled, srep_pts_scaled, th_std, ph_std)
         metadata = {
             "x_scale": axis_scales[0],
             "y_scale": axis_scales[1],
@@ -200,8 +200,15 @@ def main(args):
     if not os.path.isdir(datadir):
         os.makedirs(datadir)
     num_samples = args.count
+    scale_std = args.scale
+    if args.stdth <= 0 or args.stdph <= 0:
+        print("Invalid inputs! must be a positive integer! No data is generated.")
+        return 0
+    th_std = np.pi / args.stdth
+    ph_std = np.pi / args.stdph
     template_dir = "./template/"
-    create_deformed_ellipsoid_pairs(template_dir, datadir, num_samples)
+    create_deformed_ellipsoid_pairs(
+        template_dir, datadir, num_samples, scale_std, th_std, ph_std)
 
 
 if __name__ == "__main__":
@@ -210,5 +217,14 @@ if __name__ == "__main__":
                         default="../data/train_3d/", help="Path to dataset dir.")
     parser.add_argument('--count', '-c', type=int,
                         default=1000, help="Number of samples to generate")
+    parser.add_argument('--scale', '-s', type=float,
+                        default=0.15, help="std dev for the axes scaling")
+    parser.add_argument('--stdth', '-t', type=int,
+                        default=12, help="positive integer denominator used in std dev for bending." +
+                        "E.g if args.stdth == 4, then std dev is PI/4. Default is PI/12")
+    parser.add_argument('--stdph', '-p', type=int,
+                        default=8, help="positive integer denominator used in std dev for twisting." +
+                        "E.g if args.stdth == 4, then std dev is PI/4. Default is PI/8")
+
     args = parser.parse_args()
     main(args)
