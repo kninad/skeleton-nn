@@ -182,7 +182,7 @@ def get_aug_transform(resize_shape=(224, 224, 224), num_crop=4):
         [
             LoadImaged(keys=["image", "label"]),
             AddChanneld(keys=["image", "label"]),
-            RandZoomd(keys=["image", "label"], prob=0.2, min_zoom=0.6, max_zoom=1.2),
+            # RandZoomd(keys=["image", "label"], prob=0.2, min_zoom=0.6, max_zoom=1.2),
             CropForegroundd(keys=["image", "label"], source_key="image"),
             RandCropByPosNegLabeld(keys=["image", "label"], label_key="label",
                 spatial_size=resize_shape, pos=1, neg=1, num_samples=num_crop,
@@ -190,23 +190,59 @@ def get_aug_transform(resize_shape=(224, 224, 224), num_crop=4):
             RandFlipd(
                 keys=["image", "label"],
                 spatial_axis=[0],
-                prob=0.10,
+                prob=0.30,
             ),
             RandFlipd(
                 keys=["image", "label"],
                 spatial_axis=[1],
-                prob=0.10,
+                prob=0.30,
             ),
             RandFlipd(
                 keys=["image", "label"],
                 spatial_axis=[2],
-                prob=0.10,
+                prob=0.30,
             ),
             RandRotate90d(
                 keys=["image", "label"],
-                prob=0.10,
+                prob=0.30,
                 max_k=3,
             ),
             Resized(keys=["image", "label"], spatial_size=resize_shape),
         ]
     )
+
+def get_hippocampi_files(data_dir):
+    images = sorted(glob.glob(os.path.join(data_dir, "*_hippo.gipl.gz")))
+    data_dict = [ {"image": image_name} for image_name in images ]
+    return data_dict
+
+def get_hippocampi_transform(resize_shape=(224, 224, 224)):
+    return Compose(
+    [
+        LoadImaged(keys=["image"]),
+        AddChanneld(keys=["image"]),
+        Resized(keys=["image"], spatial_size=resize_shape),
+        ScaleIntensityRanged(keys=["image"], a_min=0, a_max=255, b_min=0, b_max=1, clip=True),
+        RandFlipd(
+            keys=["image"],
+            spatial_axis=[0],
+            prob=0.30,
+        ),
+        RandFlipd(
+            keys=["image"],
+            spatial_axis=[1],
+            prob=0.30,
+        ),
+        RandFlipd(
+            keys=["image"],
+            spatial_axis=[2],
+            prob=0.3,
+        ),
+        RandRotate90d(
+            keys=["image"],
+            prob=0.30,
+            max_k=3,
+        ),
+        ToTensord(keys=["image"]),
+    ]
+)

@@ -122,7 +122,7 @@ def main(args):
         train_data_dir, random_shuffle=False, debug=if_debug)
 
     trn_ds = CacheDataset(data=trn_files, transform=data_transforms,
-                          cache_rate=0.5, num_workers=num_data_loaders)
+                          cache_num=200, num_workers=num_data_loaders)
     trn_loader = DataLoader(trn_ds, batch_size=batch_size,
                             shuffle=True, num_workers=num_data_loaders)
 
