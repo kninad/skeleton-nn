@@ -53,7 +53,8 @@ def scale_along_axes(surf_pts, srep_pts, scale_std=0.15):
 
 def bend_and_twist(surf_pts_scaled, srep_pts_scaled, std_th=np.pi/12, std_ph=np.pi/8):
     # Apply bending/twisting
-    th = np.random.normal(np.pi/3, std_th)
+    th1 = np.random.normal(np.pi/3, std_th)
+    th2 = np.random.normal(np.pi/3, std_th)
     ph = np.random.normal(np.pi/3, std_ph)
 
     xmax = np.max(surf_pts_scaled[:, 0])
@@ -63,8 +64,10 @@ def bend_and_twist(surf_pts_scaled, srep_pts_scaled, std_th=np.pi/12, std_ph=np.
     for i in range(surf_pts_scaled.shape[0]):
         if surf_pts_scaled[i, 0] > 0:
             frac = surf_pts_scaled[i, 0] / xmax
+            th = th1
         else:
             frac = np.abs(surf_pts_scaled[i, 0]) / xmin
+            th = th2
 
         surf_pts_bt[i, 0] = (
             surf_pts_scaled[i, 0]*np.cos(frac*th) - surf_pts_scaled[i, 2]*np.sin(frac*th))
@@ -79,8 +82,10 @@ def bend_and_twist(surf_pts_scaled, srep_pts_scaled, std_th=np.pi/12, std_ph=np.
     for i in range(srep_pts_scaled.shape[0]):
         if srep_pts_scaled[i, 0] > 0:
             frac = srep_pts_scaled[i, 0] / xmax
+            th = th1
         else:
             frac = np.abs(srep_pts_scaled[i, 0]) / xmin
+            th = th2
 
         srep_pts_bt[i, 0] = (
             srep_pts_scaled[i, 0]*np.cos(frac*th) - srep_pts_scaled[i, 2]*np.sin(frac*th))
