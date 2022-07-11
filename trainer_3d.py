@@ -115,7 +115,6 @@ def main(args):
         f'Learning Rate:{learning_rate} | Epochs:{num_epochs} | BatchSize:{batch_size}')
     print(f"Training data dir: {train_data_dir}")
 
-    # data_transforms = get_srep_data_transform((resize_shape, resize_shape, resize_shape))
     data_transforms = get_aug_transform(resize_shape=(resize_shape, resize_shape, resize_shape))
     
     trn_files, _, _ = get_surf_srep_split(

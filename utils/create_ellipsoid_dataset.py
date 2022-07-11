@@ -53,6 +53,8 @@ def scale_along_axes(surf_pts, srep_pts, scale_std=0.15):
 
 def bend_and_twist(surf_pts_scaled, srep_pts_scaled, std_th=np.pi/12, std_ph=np.pi/8):
     # Apply bending/twisting
+    # th is the bend angle theta. th1, th2 are two separate bend angles to introduce assymetry
+    # ph is the twist angle phi
     th1 = np.random.normal(np.pi/3, std_th)
     th2 = np.random.normal(np.pi/3, std_th)
     ph = np.random.normal(np.pi/3, std_ph)
@@ -205,7 +207,7 @@ def main(args):
     if not os.path.isdir(datadir):
         os.makedirs(datadir)
     num_samples = args.count
-    scale_std = args.scale
+    scale_std = args.stdscale
     if args.stdth <= 0 or args.stdph <= 0:
         print("Invalid inputs! must be a positive integer! No data is generated.")
         return 0
@@ -222,14 +224,14 @@ if __name__ == "__main__":
                         default="../data/train_3d/", help="Path to dataset dir.")
     parser.add_argument('--count', '-c', type=int,
                         default=1000, help="Number of samples to generate")
-    parser.add_argument('--scale', '-s', type=float,
+    parser.add_argument('--stdscale', '-s', type=float,
                         default=0.15, help="std dev for the axes scaling")
     parser.add_argument('--stdth', '-t', type=int,
-                        default=12, help="positive integer denominator used in std dev for bending." +
+                        default=12, help="positive integer denominator used in std dev for sampling the bend angle theta." +
                         "E.g if args.stdth == 4, then std dev is PI/4. Default is PI/12")
     parser.add_argument('--stdph', '-p', type=int,
-                        default=8, help="positive integer denominator used in std dev for twisting." +
-                        "E.g if args.stdth == 4, then std dev is PI/4. Default is PI/8")
+                        default=8, help="positive integer denominator used in std dev for sampling the twist angle phi." +
+                        "E.g if args.stdph == 4, then std dev is PI/4. Default is PI/8")
 
     args = parser.parse_args()
     main(args)
