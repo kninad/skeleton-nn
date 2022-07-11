@@ -99,3 +99,23 @@ the current state, it loads up the saved model and outputs the predicted
 skeletons as images in `experiments/<exp_dir>/evals/images/`
 
 `python eval.py -c latest -e experiments/<exp_dir>/`.
+
+## Synthetic 3D Data Generation
+
+Refer to `utils/create_ellipsoid_dataset.py` for creating a synthetic dataset of
+deformed ellipsoids with their corresponding medial sheets (as the ground truth
+labels). The script loads up an ellipsoid from the `utils/template/` folder and
+randomly applies scale, bend, and twist deformations to yield a pair of
+a deformed ellipsoid and its corresponding medial sheet as binary 3d images.
+The ellipsoid is independently scaled along the three axes with the scale
+factor for each sampled from a Gaussian distribution centered at 1. The bend and 
+twist angles are sampled from a Gaussian distribution with fixed mean ($\pi/3$). 
+Arguments to the data generation script include:
+
+- `--data_dir` : directory for saving the generated dataset.
+- `--count` : number of (ellipsoid, medial sheets) samples to generate.
+- `--stdscale` : std dev for the axes scaling.
+- `--stdth` : positive integer denominator used in std dev for sampling the bend angle theta `th`.
+              The bend angle std-dev is $\pi/X$ with `X` being the supplied integer.
+- `--stdph` : positive integer denominator used in std dev for sampling the twist angle phi `ph`.
+              The bend angle std-dev is $\pi/X$ with `X` being the supplied integer.
