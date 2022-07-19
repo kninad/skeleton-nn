@@ -8,6 +8,7 @@ import itk
 import vtk
 from itkwidgets import view
 from vtk.util import numpy_support
+import open3d as o3d
 
 
 def center_and_align(surf_pts, srep_pts):
@@ -102,7 +103,12 @@ def bend_and_twist(surf_pts_scaled, srep_pts_scaled, std_th=np.pi/12, std_ph=np.
 
 
 def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000, 
-                                    scale_std=0.15, th_std=np.pi/12, ph_std=np.pi/8):
+                                    scale_std=0.15, th_std=np.pi/12, ph_std=np.pi/8, plydata=False):
+    
+    args = f"count_{count}-scale_{scale_std}-th_{th_std}-ph_{ph_std}-ply_{plydata}"
+    with open(os.path.join(data_dir, "args_datagen.txt"), "a") as f:
+        f.write(args)
+    
     ellipsoid_spharm_f = os.path.join(template_dir, 'ellipsoid_SPHARM.vtk')
     srep_f = os.path.join(template_dir, 'srep_upsampled.vtp')
     surf_reader = vtk.vtkPolyDataReader()
@@ -135,71 +141,83 @@ def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000,
         with open(os.path.join(data_dir, f"meta_{idx}.json"), "w") as fp:
             json.dump(metadata, fp)
 
-        surf.GetPoints().SetData(numpy_support.numpy_to_vtk(surf_pts_bt))
-        w = vtk.vtkXMLPolyDataWriter()
-        # w.SetFileName(f'surf_{xscale}_{yscale}_{zscale}_{th}_{ph}.vtp')
-        surf_vtp_f = os.path.join(data_dir, f'surf_{idx}.vtp')
-        w.SetFileName(surf_vtp_f)
-        w.SetInputData(surf)
-        w.Update()
+        if plydata:
+            surf_ply_f = os.path.join(data_dir, f'surf_{idx}.ply')
+            srep_ply_f = os.path.join(data_dir, f'srep_{idx}.ply')
+            # Write out the ellipsoid surface points as a ply file
+            pcd_surf = o3d.geometry.PointCloud()
+            pcd_surf.points = o3d.utility.Vector3dVector(surf_pts_bt)
+            o3d.io.write_point_cloud(surf_ply_f, pcd_surf)
+            # Write out the srep points as a ply file
+            pcd_srep = o3d.geometry.PointCloud()
+            pcd_srep.points = o3d.utility.Vector3dVector(srep_pts_bt)
+            o3d.io.write_point_cloud(srep_ply_f, pcd_srep)
+        else:                
+            surf.GetPoints().SetData(numpy_support.numpy_to_vtk(surf_pts_bt))
+            w = vtk.vtkXMLPolyDataWriter()
+            # w.SetFileName(f'surf_{xscale}_{yscale}_{zscale}_{th}_{ph}.vtp')
+            surf_vtp_f = os.path.join(data_dir, f'surf_{idx}.vtp')
+            w.SetFileName(surf_vtp_f)
+            w.SetInputData(surf)
+            w.Update()
 
-        srep.GetPoints().SetData(numpy_support.numpy_to_vtk(srep_pts_bt))
-        w = vtk.vtkXMLPolyDataWriter()
-        srep_vtp_f = os.path.join(data_dir, f'srep_{idx}.vtp')
-        w.SetFileName(srep_vtp_f)
-        w.SetInputData(srep)
-        w.Update()
+            srep.GetPoints().SetData(numpy_support.numpy_to_vtk(srep_pts_bt))
+            w = vtk.vtkXMLPolyDataWriter()
+            srep_vtp_f = os.path.join(data_dir, f'srep_{idx}.vtp')
+            w.SetFileName(srep_vtp_f)
+            w.SetInputData(srep)
+            w.Update()
 
-        # Generate binary volumes
-        w2 = vtk.vtkOBJWriter()
-        w2.SetFileName('temp.obj')
-        w2.SetInputData(surf)
-        w2.Update()
+            # Generate binary volumes
+            w2 = vtk.vtkOBJWriter()
+            w2.SetFileName('temp.obj')
+            w2.SetInputData(surf)
+            w2.Update()
 
-        res = vtk.vtkResampleToImage()
-        res.SetInputDataObject(surf)
-        res.SetUseInputBounds(True)
-        res.SetSamplingDimensions(250, 250, 250)
-        res.Update()
-        res_i = res.GetOutput()
+            res = vtk.vtkResampleToImage()
+            res.SetInputDataObject(surf)
+            res.SetUseInputBounds(True)
+            res.SetSamplingDimensions(250, 250, 250)
+            res.Update()
+            res_i = res.GetOutput()
 
-        # Convert surface mesh to binary image
-        mesh_reader = itk.MeshFileReader.MD3.New()
-        mesh_reader.SetFileName('temp.obj')
-        mesh_reader.Update()
+            # Convert surface mesh to binary image
+            mesh_reader = itk.MeshFileReader.MD3.New()
+            mesh_reader.SetFileName('temp.obj')
+            mesh_reader.Update()
 
-        m2b = itk.TriangleMeshToBinaryImageFilter.MD3ID3.New()
-        m2b.SetInput(mesh_reader.GetOutput())
-        m2b.SetSpacing(res_i.GetSpacing())
-        m2b.SetOrigin(res_i.GetOrigin())
-        m2b.SetSize((250, 250, 250))
-        m2b.SetInsideValue(1)  # Hence Binary! Inside/outside value is 1/0
-        m2b.SetOutsideValue(0)
-        m2b.Update()
+            m2b = itk.TriangleMeshToBinaryImageFilter.MD3ID3.New()
+            m2b.SetInput(mesh_reader.GetOutput())
+            m2b.SetSpacing(res_i.GetSpacing())
+            m2b.SetOrigin(res_i.GetOrigin())
+            m2b.SetSize((250, 250, 250))
+            m2b.SetInsideValue(1)  # Hence Binary! Inside/outside value is 1/0
+            m2b.SetOutsideValue(0)
+            m2b.Update()
 
-        surf_nrrd_f = os.path.join(data_dir, f'surf_{idx}.nrrd')
-        itk.imwrite(m2b.GetOutput(), surf_nrrd_f, compression=True)
+            surf_nrrd_f = os.path.join(data_dir, f'surf_{idx}.nrrd')
+            itk.imwrite(m2b.GetOutput(), surf_nrrd_f, compression=True)
 
-        # Convert s-rep to binary image
-        im_arr = itk.array_view_from_image(m2b.GetOutput())
-        im2 = itk.image_from_array(np.zeros(im_arr.shape))
-        im2.CopyInformation(m2b.GetOutput())
+            # Convert s-rep to binary image
+            im_arr = itk.array_view_from_image(m2b.GetOutput())
+            im2 = itk.image_from_array(np.zeros(im_arr.shape))
+            im2.CopyInformation(m2b.GetOutput())
 
-        loc = vtk.vtkCellLocator()
-        loc.SetDataSet(res_i)
-        loc.BuildLocator()
+            loc = vtk.vtkCellLocator()
+            loc.SetDataSet(res_i)
+            loc.BuildLocator()
 
-        for i in range(srep.GetNumberOfPoints()):
-            pt = srep.GetPoint(i)
+            for i in range(srep.GetNumberOfPoints()):
+                pt = srep.GetPoint(i)
 
-            ind = im2.TransformPhysicalPointToIndex(pt)
-            im2.SetPixel(ind, 1)  # pixel val is 1 for the srep pixels.
+                ind = im2.TransformPhysicalPointToIndex(pt)
+                im2.SetPixel(ind, 1)  # pixel val is 1 for the srep pixels.
 
-        im2 = itk.binary_dilate_image_filter(im2, radius=1, foreground_value=1)
-        im2 = itk.binary_morphological_closing_image_filter(
-            im2, radius=1, foreground_value=1)
-        srep_nrrd_f = os.path.join(data_dir, f'srep_{idx}.nrrd')
-        itk.imwrite(im2, srep_nrrd_f, compression=True)
+            im2 = itk.binary_dilate_image_filter(im2, radius=1, foreground_value=1)
+            im2 = itk.binary_morphological_closing_image_filter(
+                im2, radius=1, foreground_value=1)
+            srep_nrrd_f = os.path.join(data_dir, f'srep_{idx}.nrrd')
+            itk.imwrite(im2, srep_nrrd_f, compression=True)
 
 
 def main(args):
@@ -215,7 +233,7 @@ def main(args):
     ph_std = np.pi / args.stdph
     template_dir = "./template/"
     create_deformed_ellipsoid_pairs(
-        template_dir, datadir, num_samples, scale_std, th_std, ph_std)
+        template_dir, datadir, num_samples, scale_std, th_std, ph_std, args.ply)
 
 
 if __name__ == "__main__":
@@ -232,6 +250,8 @@ if __name__ == "__main__":
     parser.add_argument('--stdph', '-p', type=int,
                         default=8, help="positive integer denominator used in std dev for sampling the twist angle phi." +
                         "E.g if args.stdph == 4, then std dev is PI/4. Default is PI/8")
+    parser.add_argument('--ply', action='store_true',
+                        help="If specified, create a dataset of ply files (point clouds) for the surf/srep paird")
 
     args = parser.parse_args()
     main(args)
