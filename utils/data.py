@@ -144,7 +144,7 @@ def get_surf_srep_split(data_dir: str, validation_frac=0.1, test_frac=0.1,
         raise AssertionError(
             'Check the data directory for equal number of data and label files!')
     data_dicts = [
-        {"image": image_name, "label": label_name}
+        {"image": image_name, "label": label_name, "fname": get_fname(image_name)}
         for image_name, label_name in zip(images, labels)
     ]
 
@@ -211,9 +211,14 @@ def get_aug_transform(resize_shape=(224, 224, 224), num_crop=4):
         ]
     )
 
+
+def get_fname(file_path):
+    fname_with_ext = os.path.basename(file_path)
+    return fname_with_ext.split(".")[0]
+
 def get_hippocampi_files(data_dir):
     images = sorted(glob.glob(os.path.join(data_dir, "*_hippo.gipl.gz")))
-    data_dict = [ {"image": image_name} for image_name in images ]
+    data_dict = [ {"image": image_name, "fname": get_fname(image_name)} for image_name in images ]
     return data_dict
 
 def get_hippocampi_transform(resize_shape=(224, 224, 224)):
@@ -223,26 +228,6 @@ def get_hippocampi_transform(resize_shape=(224, 224, 224)):
         AddChanneld(keys=["image"]),
         Resized(keys=["image"], spatial_size=resize_shape),
         ScaleIntensityRanged(keys=["image"], a_min=0, a_max=255, b_min=0, b_max=1, clip=True),
-        RandFlipd(
-            keys=["image"],
-            spatial_axis=[0],
-            prob=0.30,
-        ),
-        RandFlipd(
-            keys=["image"],
-            spatial_axis=[1],
-            prob=0.30,
-        ),
-        RandFlipd(
-            keys=["image"],
-            spatial_axis=[2],
-            prob=0.3,
-        ),
-        RandRotate90d(
-            keys=["image"],
-            prob=0.30,
-            max_k=3,
-        ),
         ToTensord(keys=["image"]),
     ]
 )
