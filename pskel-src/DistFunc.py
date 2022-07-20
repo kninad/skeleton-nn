@@ -3,13 +3,13 @@ import numpy as np
 
 
 def knn_with_batch(p1, p2, k, is_max=False):
-    '''
+    """
     :param p1: size[B,N,D]
     :param p2: size[B,M,D]
     :param k: k nearest neighbors
     :param is_max: k-nearest neighbors or k-farthest neighbors
     :return: for each point in p1, returns the indices of the k nearest points in p2; size[B,N,k]
-    '''
+    """
     assert p1.size(0) == p2.size(0) and p1.size(2) == p2.size(2)
 
     p1 = p1.unsqueeze(1)
@@ -28,11 +28,11 @@ def knn_with_batch(p1, p2, k, is_max=False):
 
 
 def distance_map_with_batch(p1, p2):
-    '''
+    """
     :param p1: size[B,N,D]
     :param p2: size[B,M,D]
     :return: for each point in p1, returns the distances to all the points in p2; size[B,N,M]
-    '''
+    """
     assert p1.size(0) == p2.size(0) and p1.size(2) == p2.size(2)
 
     p1 = p1.unsqueeze(1)
@@ -49,12 +49,12 @@ def distance_map_with_batch(p1, p2):
 
 
 def closest_distance_with_batch(p1, p2, is_sum=True):
-    '''
+    """
     :param p1: size[B,N,D]
     :param p2: size[B,M,D]
     :param is_sum: whehter to return the summed scalar or the separate distances with indices
     :return: the distances from p1 to the closest points in p2
-    '''
+    """
     assert p1.size(0) == p2.size(0) and p1.size(2) == p2.size(2)
 
     p1 = p1.unsqueeze(1)
@@ -77,11 +77,11 @@ def closest_distance_with_batch(p1, p2, is_sum=True):
 
 
 def point2sphere_distance_with_batch(p1, p2):
-    '''
+    """
     :param p1: size[B,N,3]
     :param p2: size[B,M,4]
     :return: the distances from p1 to the closest spheres in p2
-    '''
+    """
     assert p1.size(0) == p2.size(0) and p1.size(2) == 3 and p2.size(2) == 4
 
     p1 = p1.unsqueeze(1)
@@ -111,11 +111,11 @@ def point2sphere_distance_with_batch(p1, p2):
 
 
 def sphere2point_distance_with_batch(p1, p2):
-    '''
+    """
     :param p1: size[B,N,4]
     :param p2: size[B,M,3]
     :return: the distances from sphere p1 to the closest points in p2
-    '''
+    """
 
     assert p1.size(0) == p2.size(0) and p1.size(2) == 4 and p2.size(2) == 3
 
@@ -145,12 +145,12 @@ def sphere2point_distance_with_batch(p1, p2):
 
 
 def closest_distance_np(p1, p2, is_sum=True):
-    '''
+    """
     :param p1: size[N, D], numpy array
     :param p2: size[M, D], numpy array
     :param is_sum: whehter to return the summed scalar or the separate distances with indices
     :return: the distances from p1 to the closest points in p2
-    '''
+    """
 
     p1 = torch.from_numpy(p1[None, :, :]).double()
     p2 = torch.from_numpy(p2[None, :, :]).double()

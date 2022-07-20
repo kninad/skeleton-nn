@@ -15,7 +15,7 @@ class PCDataset(Dataset):
         self.to_normalize = normalize
 
     def __getitem__(self, index):
-        fpath = os.path.join(self.data_folder, self.data_id[index] + '.ply')
+        fpath = os.path.join(self.data_folder, self.data_id[index] + ".ply")
         data_pc = rw.load_ply_points(fpath, self.point_num, self.to_normalize)
         return index, data_pc
 

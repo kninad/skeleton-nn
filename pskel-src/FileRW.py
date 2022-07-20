@@ -3,9 +3,10 @@ import os
 from tqdm import tqdm
 import open3d as o3d
 
+
 def load_data_id(path):
     print("opening the file...")
-    fopen = open(path, 'r', encoding='utf-8')
+    fopen = open(path, "r", encoding="utf-8")
     print("opened data id file")
     lines = fopen.readlines()
     print("read the lines!")
@@ -13,9 +14,9 @@ def load_data_id(path):
     linecount = 0
 
     for line in tqdm(lines):
-        if line == '\n':
+        if line == "\n":
             continue
-        id_list.append(line.strip('\n'))
+        id_list.append(line.strip("\n"))
         linecount = linecount + 1
     fopen.close()
     return id_list
@@ -25,12 +26,14 @@ def check_and_create_dirs(dir_list):
     for dir in dir_list:
         if not os.path.exists(dir):
             os.makedirs(dir)
-            print(dir + ' does not exist. Created.')
+            print(dir + " does not exist. Created.")
+
 
 def save_ply_points(points, path):
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
     o3d.io.write_point_cloud(path, pcd)
+
 
 def save_off_points(points, path):
     with open(path, "w") as file:
@@ -38,7 +41,13 @@ def save_off_points(points, path):
         file.write(str(int(points.shape[0])) + " 0" + " 0\n")
         for i in range(points.shape[0]):
             file.write(
-                str(float(points[i][0])) + " " + str(float(points[i][1])) + " " + str(float(points[i][2])) + "\n")
+                str(float(points[i][0]))
+                + " "
+                + str(float(points[i][1]))
+                + " "
+                + str(float(points[i][2]))
+                + "\n"
+            )
 
 
 def save_off_mesh(v, f, path):
@@ -48,9 +57,24 @@ def save_off_mesh(v, f, path):
         f_num = len(f)
         file.write(str(v_num) + " " + str(len(f)) + " " + str(0) + "\n")
         for j in range(v_num):
-            file.write(str(float(v[j][0])) + " " + str(float(v[j][1])) + " " + str(float(v[j][2])) + "\n")
+            file.write(
+                str(float(v[j][0]))
+                + " "
+                + str(float(v[j][1]))
+                + " "
+                + str(float(v[j][2]))
+                + "\n"
+            )
         for j in range(f_num):
-            file.write("3 " + str(int(f[j][0])) + " " + str(int(f[j][1])) + " " + str(int(f[j][2])) + "\n")
+            file.write(
+                "3 "
+                + str(int(f[j][0]))
+                + " "
+                + str(int(f[j][1]))
+                + " "
+                + str(int(f[j][2]))
+                + "\n"
+            )
 
 
 def save_coff_points(points, colors, path):
@@ -58,8 +82,22 @@ def save_coff_points(points, colors, path):
         file.write("COFF\n")
         file.write(str(int(points.shape[0])) + " 0" + " 0\n")
         for i in range(points.shape[0]):
-            file.write(str(float(points[i][0])) + " " + str(float(points[i][1])) + " " + str(float(points[i][2])) + " ")
-            file.write(str(colors[i][0]) + " " + str(colors[i][1]) + " " + str(colors[i][2]) + "\n")
+            file.write(
+                str(float(points[i][0]))
+                + " "
+                + str(float(points[i][1]))
+                + " "
+                + str(float(points[i][2]))
+                + " "
+            )
+            file.write(
+                str(colors[i][0])
+                + " "
+                + str(colors[i][1])
+                + " "
+                + str(colors[i][2])
+                + "\n"
+            )
 
 
 def save_graph(v, A, path):
@@ -67,7 +105,15 @@ def save_graph(v, A, path):
         file.write("g line\n")
         v_num = len(v)
         for j in range(v_num):
-            file.write("v " + str(float(v[j][0])) + " " + str(float(v[j][1])) + " " + str(float(v[j][2])) + "\n")
+            file.write(
+                "v "
+                + str(float(v[j][0]))
+                + " "
+                + str(float(v[j][1]))
+                + " "
+                + str(float(v[j][2]))
+                + "\n"
+            )
         file.write("g\n")
 
         # A is a symmetric matrix
@@ -78,7 +124,7 @@ def save_graph(v, A, path):
 
 
 def save_spheres(center, radius, path):
-    sp_v, sp_f = load_off('sphere16.off')
+    sp_v, sp_f = load_off("sphere16.off")
 
     with open(path, "w") as file:
         for i in range(center.shape[0]):
@@ -86,13 +132,28 @@ def save_spheres(center, radius, path):
             v_ = sp_v * r
             v_ = v_ + v
             for m in range(v_.shape[0]):
-                file.write('v ' + str(v_[m][0]) + ' ' + str(v_[m][1]) + ' ' + str(v_[m][2]) + '\n')
+                file.write(
+                    "v "
+                    + str(v_[m][0])
+                    + " "
+                    + str(v_[m][1])
+                    + " "
+                    + str(v_[m][2])
+                    + "\n"
+                )
 
         for m in range(center.shape[0]):
             base = m * sp_v.shape[0] + 1
             for j in range(sp_f.shape[0]):
                 file.write(
-                    'f ' + str(sp_f[j][0] + base) + ' ' + str(sp_f[j][1] + base) + ' ' + str(sp_f[j][2] + base) + '\n')
+                    "f "
+                    + str(sp_f[j][0] + base)
+                    + " "
+                    + str(sp_f[j][1] + base)
+                    + " "
+                    + str(sp_f[j][2] + base)
+                    + "\n"
+                )
 
 
 def save_skel_mesh(v, f, e, path_f, path_e):
@@ -103,12 +164,36 @@ def save_skel_mesh(v, f, e, path_f, path_e):
     e_num = len(e)
 
     for j in range(v_num):
-        f_file.write('v ' + str(float(v[j][0])) + " " + str(float(v[j][1])) + " " + str(float(v[j][2])) + "\n")
+        f_file.write(
+            "v "
+            + str(float(v[j][0]))
+            + " "
+            + str(float(v[j][1]))
+            + " "
+            + str(float(v[j][2]))
+            + "\n"
+        )
     for j in range(f_num):
-        f_file.write("f " + str(int(f[j][0]) + 1) + " " + str(int(f[j][1]) + 1) + " " + str(int(f[j][2]) + 1) + "\n")
+        f_file.write(
+            "f "
+            + str(int(f[j][0]) + 1)
+            + " "
+            + str(int(f[j][1]) + 1)
+            + " "
+            + str(int(f[j][2]) + 1)
+            + "\n"
+        )
 
     for j in range(v_num):
-        e_file.write('v ' + str(float(v[j][0])) + " " + str(float(v[j][1])) + " " + str(float(v[j][2])) + "\n")
+        e_file.write(
+            "v "
+            + str(float(v[j][0]))
+            + " "
+            + str(float(v[j][1]))
+            + " "
+            + str(float(v[j][2]))
+            + "\n"
+        )
     for j in range(e_num):
         e_file.write("l " + str(int(e[j][0]) + 1) + " " + str(int(e[j][1]) + 1) + "\n")
 
@@ -122,7 +207,15 @@ def save_skel_xyzr(v, r, path):
     file.write(str(v_num) + "\n")
     for i in range(v_num):
         file.write(
-            str(float(v[i][0])) + " " + str(float(v[i][1])) + " " + str(float(v[i][2])) + " " + str(float(r[i])) + "\n")
+            str(float(v[i][0]))
+            + " "
+            + str(float(v[i][1]))
+            + " "
+            + str(float(v[i][2]))
+            + " "
+            + str(float(r[i]))
+            + "\n"
+        )
     file.close()
 
 
@@ -137,11 +230,13 @@ def save_colored_weights(path, shape_name, weights, samples):
             color = min_gray - int((weights[i][j] / max_w) * min_gray)
             colors[j] = np.array([color, color, color], np.int)
 
-        save_coff_points(samples, colors, path + str(shape_name) + '_' + str(i) + '_weight.off')
+        save_coff_points(
+            samples, colors, path + str(shape_name) + "_" + str(i) + "_weight.off"
+        )
 
 
 def load_off(path):
-    fopen = open(path, 'r', encoding='utf-8')
+    fopen = open(path, "r", encoding="utf-8")
     lines = fopen.readlines()
     linecount = 0
     pts = np.zeros((1, 3), np.float64)
@@ -173,7 +268,7 @@ def load_ply_points(pc_filepath, expected_point=2000, normalize=False):
 
     pcd = o3d.io.read_point_cloud(pc_filepath)
     pts = np.asarray(pcd.points)
-    '''ORG CODE
+    """ORG CODE
     fopen = open(pc_filepath, 'r', encoding='utf-8')
     lines = fopen.readlines()
     pts = np.zeros((expected_point, 3), np.float64)
@@ -201,7 +296,7 @@ def load_ply_points(pc_filepath, expected_point=2000, normalize=False):
             break
 
     fopen.close()
-    '''
+    """
     if normalize:
         pts -= np.mean(pts, axis=0)
         max_dist = np.max(np.linalg.norm(pts, axis=1))
