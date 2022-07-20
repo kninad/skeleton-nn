@@ -32,25 +32,6 @@ from monai.utils import set_determinism
 
 set_determinism(seed=0)
 
-import file_rw as rw
-
-
-class PCDataset(Dataset):
-    def __init__(self, data_list, data_folder, point_num, normalize=False):
-        self.data_id = data_list
-        self.data_folder = data_folder
-        self.point_num = point_num
-        self.to_normalize = normalize
-
-    def __getitem__(self, index):
-        fpath = os.path.join(self.data_folder, self.data_id[index] + ".ply")
-        data_pc = rw.load_ply_points(fpath, self.point_num, self.to_normalize)
-        return index, data_pc
-
-    def __len__(self):
-        return len(self.data_id)
-
-
 def get_resize_transform(resize: int):
     return transforms.Compose(
         [
