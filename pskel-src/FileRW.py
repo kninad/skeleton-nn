@@ -27,6 +27,10 @@ def check_and_create_dirs(dir_list):
             os.makedirs(dir)
             print(dir + ' does not exist. Created.')
 
+def save_ply_points(points, path):
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+    o3d.io.write_point_cloud(path, pcd)
 
 def save_off_points(points, path):
     with open(path, "w") as file:
