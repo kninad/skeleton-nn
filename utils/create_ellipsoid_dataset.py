@@ -126,6 +126,17 @@ def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000,
 
     surf_pts_align, srep_pts_align = center_and_align(surf_pts, srep_pts)
 
+    meta_data_dir = os.path.join(data_dir, "meta_data")
+    surf_imag_dir = os.path.join(data_dir, "image_surf")
+    srep_imag_dir = os.path.join(data_dir, "image_srep")
+    surf_plyf_dir = os.path.join(data_dir, "pointcloud_surf")
+    srep_plyf_dir = os.path.join(data_dir, "pointcloud_srep")
+    
+    for dir in [meta_data_dir, surf_imag_dir, srep_imag_dir, surf_plyf_dir, srep_plyf_dir]:
+        if not os.path.isdir(dir):
+            os.makedirs(dir)
+    
+
     for idx in tqdm(range(1, count+1)):
         surf_pts_scaled, srep_pts_scaled, axis_scales = scale_along_axes(
             surf_pts_align, srep_pts_align, scale_std)
@@ -138,12 +149,12 @@ def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000,
             "theta": th,
             "phi": ph
         }
-        with open(os.path.join(data_dir, f"meta_{idx}.json"), "w") as fp:
+        with open(os.path.join(meta_data_dir, f"meta_{idx}.json"), "w") as fp:
             json.dump(metadata, fp)
 
         if plydata:
-            surf_ply_f = os.path.join(data_dir, f'surf_{idx}.ply')
-            srep_ply_f = os.path.join(data_dir, f'srep_{idx}.ply')
+            surf_ply_f = os.path.join(surf_plyf_dir, f'surf_{idx}.ply')
+            srep_ply_f = os.path.join(srep_plyf_dir, f'srep_{idx}.ply')
             # Write out the ellipsoid surface points as a ply file
             pcd_surf = o3d.geometry.PointCloud()
             pcd_surf.points = o3d.utility.Vector3dVector(surf_pts_bt)
@@ -195,7 +206,7 @@ def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000,
             m2b.SetOutsideValue(0)
             m2b.Update()
 
-            surf_nrrd_f = os.path.join(data_dir, f'surf_{idx}.nrrd')
+            surf_nrrd_f = os.path.join(surf_imag_dir, f'surf_{idx}.nrrd')
             itk.imwrite(m2b.GetOutput(), surf_nrrd_f, compression=True)
 
             # Convert s-rep to binary image
@@ -216,7 +227,7 @@ def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000,
             im2 = itk.binary_dilate_image_filter(im2, radius=1, foreground_value=1)
             im2 = itk.binary_morphological_closing_image_filter(
                 im2, radius=1, foreground_value=1)
-            srep_nrrd_f = os.path.join(data_dir, f'srep_{idx}.nrrd')
+            srep_nrrd_f = os.path.join(srep_imag_dir, f'srep_{idx}.nrrd')
             itk.imwrite(im2, srep_nrrd_f, compression=True)
 
 
