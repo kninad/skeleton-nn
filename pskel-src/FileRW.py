@@ -297,6 +297,11 @@ def load_ply_points(pc_filepath, expected_point=2000, normalize=False):
 
     fopen.close()
     """
+    if pts.shape[0] < expected_point:
+        raise AssertionError(f"Given point cloud has < {expected_point} number of pts (expected)")
+
+    idxs = np.random.randint(pts.shape[0], size=expected_point)
+    pts = pts[idxs, :]
     if normalize:
         pts -= np.mean(pts, axis=0)
         max_dist = np.max(np.linalg.norm(pts, axis=1))
