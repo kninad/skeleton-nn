@@ -21,6 +21,24 @@ class PCDataset(Dataset):
     def __len__(self):
         return len(self.data_id)
 
+class EllipsoidPcDataset(Dataset):
+    def __init__(self, data_list, label_list, data_folder, label_folder, point_num, normalize=False):
+        self.data_id = data_list
+        self.label_id = label_list
+        self.data_folder = data_folder
+        self.label_folder = label_folder
+        self.point_num = point_num
+        self.to_normalize = normalize
+
+    def __getitem__(self, index):
+        fpath = os.path.join(self.data_folder, self.data_id[index] + ".ply")
+        data_pc = rw.load_ply_points(fpath, self.point_num, self.to_normalize)
+        label_fpath = os.path.join(self.label_folder, self.label_id[index] + ".ply")
+        label_pc = rw.load_ply_points(label_fpath, self.point_num, self.to_normalize)
+        return index, data_pc, label_pc
+
+    def __len__(self):
+        return len(self.data_id)
 
 class TestBinaryImageData(Dataset):
     def __init__(self, data_list, data_folder, point_num, load_in_ram=False):
