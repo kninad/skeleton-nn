@@ -159,6 +159,40 @@ class SkelPointNet(nn.Module):
 
         return final_loss
 
+    def get_sampling_loss(self, shape_xyz, skel_xyz, skel_radius):
+        bn = skel_xyz.size()[0]
+        shape_pnum = float(shape_xyz.size()[1])
+        skel_pnum = float(skel_xyz.size()[1])
+
+        # sampling loss
+        e = 0.57735027
+        sample_directions = torch.tensor(
+            [
+                [e, e, e],
+                [e, e, -e],
+                [e, -e, e],
+                [e, -e, -e],
+                [-e, e, e],
+                [-e, e, -e],
+                [-e, -e, e],
+                [-e, -e, -e],
+            ]
+        )
+        sample_directions = torch.unsqueeze(sample_directions, 0)
+        sample_directions = sample_directions.repeat(bn, int(skel_pnum), 1).cuda()
+        sample_centers = torch.repeat_interleave(skel_xyz, 8, dim=1)
+        sample_radius = torch.repeat_interleave(skel_radius, 8, dim=1)
+        sample_xyz = sample_centers + sample_radius * sample_directions
+
+        cd_sample1 = DF.closest_distance_with_batch(sample_xyz, shape_xyz) / (
+            skel_pnum * 8
+        )
+        cd_sample2 = DF.closest_distance_with_batch(shape_xyz, sample_xyz) / (
+            shape_pnum
+        )
+        loss_sample = cd_sample1 + cd_sample2
+        return loss_sample
+
     def get_smoothness_loss(self, skel_xyz, A, k=6):
 
         bn, pn, p_dim = skel_xyz.size()[0], skel_xyz.size()[1], skel_xyz.size()[2]
