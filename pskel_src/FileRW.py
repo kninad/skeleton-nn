@@ -22,6 +22,31 @@ def load_data_id(path):
     return id_list
 
 
+def load_label_id(path):
+    """
+    Loads up a data id file and returns the corresponding label file list.
+    Example surf_199 -> srep_199 where srep is the label file and surf is
+    the input file.
+    """
+    print("opening the file...")
+    fopen = open(path, "r", encoding="utf-8")
+    print("opened data id file")
+    lines = fopen.readlines()
+    print("read the lines!")
+    id_list = []
+    linecount = 0
+
+    for line in tqdm(lines):
+        if line == "\n":
+            continue
+        data_id = line.strip("\n")
+        label_id = 'srep_' + data_id.split('_')[1]
+        id_list.append(label_id)
+        linecount = linecount + 1
+    fopen.close()
+    return id_list
+
+
 def check_and_create_dirs(dir_list):
     for dir in dir_list:
         if not os.path.exists(dir):
@@ -298,7 +323,9 @@ def load_ply_points(pc_filepath, expected_point=2000, normalize=False):
     fopen.close()
     """
     if pts.shape[0] < expected_point:
-        raise AssertionError(f"Given point cloud has < {expected_point} number of pts (expected)")
+        raise AssertionError(
+            f"Given point cloud has < {expected_point} number of pts (expected)"
+        )
 
     idxs = np.random.randint(pts.shape[0], size=expected_point)
     pts = pts[idxs, :]
