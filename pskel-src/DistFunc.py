@@ -1,5 +1,40 @@
 import torch
 import numpy as np
+from scipy.spatial import KDTree
+from scipy.spatial.distance import directed_hausdorff
+
+
+def compute_pc_chamfer(gt_points, gen_points):
+    """
+    This functions computes the symmetric chamfer distance between two input point clouds.
+    Input:
+        gt_points: numpy array (N,3) containing the points of the ground truth shape
+        gen_points: numpy array (M,3) containing the points inferred for the shape
+    Returns:
+        Scalar (float) value for the sum of one-way chamfer dists
+    """
+    kdtree_gt_pts = KDTree(gt_points)
+
+    distances_to_gt, _ = kdtree_gt_pts.query(gen_points)
+    chamfer_to_gt = np.mean(np.square(distances_to_gt))
+
+    kdtree_gen_pts = KDTree(gen_points)
+    distances_to_gen, _ = kdtree_gen_pts.query(gt_points)
+    chamfer_to_gen = np.mean(np.square(distances_to_gen))
+
+    return chamfer_to_gt + chamfer_to_gen
+
+
+def compute_pc_haussdorff(pts_A, pts_B):
+    """
+    This functions computes the symmetric hausdorff distance between two input point clouds.
+    Input:
+        pts_A: numpy array (N,3) containing the points of the ground truth shape
+        pts_B: numpy array (M,3) containing the points inferred for the shape
+    Returns:
+        Scalar (float) value for the symmetric hausdorff dist
+    """    
+    return max(directed_hausdorff(pts_A, pts_B)[0], directed_hausdorff(pts_A, pts_B)[0])
 
 
 def knn_with_batch(p1, p2, k, is_max=False):
