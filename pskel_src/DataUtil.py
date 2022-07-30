@@ -63,7 +63,7 @@ class TestBinaryImageData(Dataset):
 
     def load_data(self, index):
         reader = image_reader.ITKReader()
-        fpath = os.path.join(self.data_folder, self.data_id[i] + ".nrrd")
+        fpath = os.path.join(self.data_folder, self.data_id[index] + ".nrrd")
         data = reader.read(fpath)
         img, meta = reader.get_data(data)
         img = np.asarray(img, np.unint8)
