@@ -179,6 +179,44 @@ def sphere2point_distance_with_batch(p1, p2):
     return dist_scalar
 
 
+def modified_sphere2point_distance_with_batch(p1, p2, weight_closest):
+    """
+    :param p1: size[B,N,4]
+    :param p2: size[B,M,3]
+    :return: the distances from sphere p1 to the closest points in p2
+    """
+
+    assert p1.size(0) == p2.size(0) and p1.size(2) == 4 and p2.size(2) == 3
+
+    p1 = p1.unsqueeze(1)
+    p2 = p2.unsqueeze(1)
+
+    p1_r = p1[:, :, :, 3]
+    p1 = p1.repeat(1, p2.size(2), 1, 1)
+    p1_r = p1_r.transpose(1, 2)
+
+    p1 = p1.transpose(1, 2)
+    p1_xyzr = p1
+    p1 = p1_xyzr[:, :, :, 0:3]
+
+    p2 = p2.repeat(1, p1.size(1), 1, 1)
+    dist = torch.add(p1, torch.neg(p2))
+    dist = torch.norm(dist, 2, dim=3)
+
+    # min_dist, min_indice = torch.min(dist, dim=2)
+    min_dist, _ = torch.topk(dist, k=2, dim=2, largest=False)
+    min_dist_1 = min_dist[:, :, :1] - p1_r # first closest point
+    min_dist_2 = min_dist[:, :, 1:] - p1_r # second closest point
+    
+    min_dist_1 = torch.norm(min_dist_1, 2, dim=2)
+    min_dist_2 = torch.norm(min_dist_2, 2, dim=2)
+
+    dist_scalar_1 = torch.sum(min_dist_1)
+    dist_scalar_2 = torch.sum(min_dist_2)
+
+    return weight_closest * dist_scalar_1 + (1 - weight_closest) * dist_scalar_2
+
+
 def closest_distance_np(p1, p2, is_sum=True):
     """
     :param p1: size[N, D], numpy array
