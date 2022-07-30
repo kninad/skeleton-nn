@@ -94,7 +94,7 @@ def main(args):
         print("Exiting...")
         return 0
 
-    learning_rate = specs["LearningRate"]
+    learning_rate = specs["LearningRateSpn"]
     batch_size = specs["BatchSize"]
     to_normalize = specs["Normalize"]
     epochs_pretrain = specs["EpochsPreTrain"]
@@ -105,6 +105,8 @@ def main(args):
     # Assume Training/Test split file (given as cmd line arg) will be present in the experiment dir
     pc_list_file = os.path.join(experiment_dir, split_file)
 
+    weight_w1 = 0.3
+    weight_w2 = 0.8
     # intialize network, optimizer, tensorboard
     model_skel = SkelPointNet(
         num_skel_points=skelpoint_num, input_channels=0, use_xyz=True
@@ -169,21 +171,20 @@ def main(args):
             #### train skeletal point network with geometric losses
             else:
                 loss = model_skel.compute_loss(
-                    batch_pc, skel_xyz, skel_r, None, 0.3, 0.4
+                    batch_pc, skel_xyz, skel_r, None, w1=weight_w1, w2=weight_w2, use_mod_loss=True, w_closest=0.5
                 )
                 tb_loss_tag = "SkeletalPoint/loss_skel"
                 tb_epoch = epoch - epochs_pretrain + 1
             loss.backward()
             optimizer_skel.step()
             loss_epoch += loss.item()
-            if epoch % save_epoch == 0:
-                save_results(eval_dir, batch_id, epoch, batch_pc, skel_xyz, skel_r)
 
         loss_epoch /= len(train_loader)
         tb_writer.add_scalar(tb_loss_tag, loss_epoch, tb_epoch)
         workspace.save_latest(experiment_dir, epoch, model_skel, optimizer_skel)
 
         if epoch % save_epoch == 0:
+            save_results(eval_dir, batch_id, epoch, batch_pc, skel_xyz, skel_r)
             workspace.save_checkpoint(experiment_dir, epoch, model_skel, optimizer_skel)
 
 
