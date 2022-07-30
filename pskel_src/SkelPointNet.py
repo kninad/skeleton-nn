@@ -99,65 +99,53 @@ class SkelPointNet(nn.Module):
 
         self.cvx_weights_mlp = nn.Sequential(*cvx_weights_modules)
 
+    def compute_supervised_loss(self, srep_xyz, skel_xyz):
+        srep_pnum = float(srep_xyz.size()[1])
+        skel_pnum = float(skel_xyz.size()[1])
+        cd_srep_to_skel = DF.closest_distance_with_batch(srep_xyz, skel_xyz) / srep_pnum
+        cd_skel_to_srep = DF.closest_distance_with_batch(skel_xyz, srep_xyz) / skel_pnum
+        return cd_skel_to_srep + cd_srep_to_skel
+
     def compute_loss(
-        self, shape_xyz, skel_xyz, skel_radius, A, w1, w2, w3=0, lap_reg=False
+        self, shape_xyz, skel_xyz, skel_radius, A, w1, w2, srep_xyz=None, w3=0, lap_reg=False,
+        use_mod_loss=False, w_closest=0.6
     ):
-        bn = skel_xyz.size()[0]
-        shape_pnum = float(shape_xyz.size()[1])
         skel_pnum = float(skel_xyz.size()[1])
 
         # sampling loss
-        e = 0.57735027
-        sample_directions = torch.tensor(
-            [
-                [e, e, e],
-                [e, e, -e],
-                [e, -e, e],
-                [e, -e, -e],
-                [-e, e, e],
-                [-e, e, -e],
-                [-e, -e, e],
-                [-e, -e, -e],
-            ]
-        )
-        sample_directions = torch.unsqueeze(sample_directions, 0)
-        sample_directions = sample_directions.repeat(bn, int(skel_pnum), 1).cuda()
-        sample_centers = torch.repeat_interleave(skel_xyz, 8, dim=1)
-        sample_radius = torch.repeat_interleave(skel_radius, 8, dim=1)
-        sample_xyz = sample_centers + sample_radius * sample_directions
-
-        cd_sample1 = DF.closest_distance_with_batch(sample_xyz, shape_xyz) / (
-            skel_pnum * 8
-        )
-        cd_sample2 = DF.closest_distance_with_batch(shape_xyz, sample_xyz) / (
-            shape_pnum
-        )
-        loss_sample = cd_sample1 + cd_sample2
+        loss_sample = self.get_sampling_loss(shape_xyz, skel_xyz, skel_radius)
 
         # point2sphere loss
+        loss_point2sphere = self.get_point2sphere_loss(shape_xyz, skel_xyz, skel_radius, 
+            use_mod_loss, w_closest)
+        
+        # radius loss
+        loss_radius = -torch.sum(skel_radius) / skel_pnum
+
+        # loss combination
+        final_loss = (
+            loss_sample + loss_point2sphere * w1 + loss_radius * w2
+        )
+        return final_loss
+
+    def get_point2sphere_loss(self, shape_xyz, skel_xyz, skel_radius, use_mod_loss, w_closest):
+        shape_pnum = float(shape_xyz.size()[1])
+        skel_pnum = float(skel_xyz.size()[1])
         skel_xyzr = torch.cat((skel_xyz, skel_radius), 2)
         cd_point2pshere1 = (
             DF.point2sphere_distance_with_batch(shape_xyz, skel_xyzr) / shape_pnum
         )
-        cd_point2sphere2 = (
-            DF.sphere2point_distance_with_batch(skel_xyzr, shape_xyz) / skel_pnum
-        )
+        if use_mod_loss:
+            cd_point2sphere2 = (
+                DF.modified_sphere2point_distance_with_batch(skel_xyzr, shape_xyz, w_closest) / skel_pnum
+            )
+        else:
+            cd_point2sphere2 = (
+                DF.sphere2point_distance_with_batch(skel_xyzr, shape_xyz) / skel_pnum
+            )
         loss_point2sphere = cd_point2pshere1 + cd_point2sphere2
+        return loss_point2sphere
 
-        # radius loss
-        loss_radius = -torch.sum(skel_radius) / skel_pnum
-
-        # Laplacian smoothness loss
-        loss_smooth = 0
-        if lap_reg:
-            loss_smooth = self.get_smoothness_loss(skel_xyzr, A) / skel_pnum
-
-        # loss combination
-        final_loss = (
-            loss_sample + loss_point2sphere * w1 + loss_radius * w2 + loss_smooth * w3
-        )
-
-        return final_loss
 
     def get_sampling_loss(self, shape_xyz, skel_xyz, skel_radius):
         bn = skel_xyz.size()[0]
