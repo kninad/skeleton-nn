@@ -21,6 +21,7 @@ class PCDataset(Dataset):
     def __len__(self):
         return len(self.data_id)
 
+
 class EllipsoidPcDataset(Dataset):
     def __init__(self, data_list, label_list, data_folder, label_folder, point_num, normalize=False):
         self.data_id = data_list
@@ -39,6 +40,7 @@ class EllipsoidPcDataset(Dataset):
 
     def __len__(self):
         return len(self.data_id)
+
 
 class TestBinaryImageData(Dataset):
     def __init__(self, data_list, data_folder, point_num, load_in_ram=False):
@@ -63,28 +65,22 @@ class TestBinaryImageData(Dataset):
 
     def load_data(self, index):
         reader = image_reader.ITKReader()
-        fpath = os.path.join(self.data_folder, self.data_id[index] + ".nrrd")
+        fpath = os.path.join(self.data_folder, self.data_id[index])
         data = reader.read(fpath)
         img, meta = reader.get_data(data)
-        img = np.asarray(img, np.unint8)
-        pts = self.image_to_point_cloud(img)
-        return pts
-
-    def image_to_point_cloud(self, image, threshold=0):
-        # bounds is a numpy array with only the boundary voxels as 1 (True)
-        bounds = find_boundaries(image)
-        # Get voxel coordinates for the boundary voxels
-        pointSet = np.argwhere(image > threshold)  # > 0 since binary image
+        img = np.asarray(img, dtype=np.uint8)
+        # Find boundaries and convert to boundary voxel indices [0, 1] form
+        bounds = find_boundaries(img)
+        pointSet = np.argwhere(bounds > 0)
         pointSet = np.array(pointSet, dtype=np.float32)
-        pointSet /= bounds.shape  # Set the coords to be between [0, 1]
+        pointSet /= bounds.shape
+        # Randomly sample desired number of points
         if pointSet.shape[0] <= self.point_num:
             raise AssertionError("Low number of boundary points in image!")
         idxs = np.random.randint(pointSet.shape[0], size=self.point_num)
         pointSet = pointSet[idxs, :]
-        pointSet = self.normalize(pointSet)
+        # Normalize the pointSet to be zero mean and inside unit sphere
+        pointSet -= np.mean(pointSet, axis=0)
+        max_dist = np.max(np.linalg.norm(pointSet, axis=1))
+        pointSet /= max_dist
         return pointSet
-
-    def normalize(self, pts):
-        pts -= np.mean(pts, axis=0)
-        pts /= np.max(np.linalg.norm(pts, axis=1))  # max dist
-        return pts
