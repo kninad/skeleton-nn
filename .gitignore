@@ -1,5 +1,6 @@
 # Custom ignore
 
+results.txt
 data/
 experiments/
 .vscode/

@@ -103,15 +103,18 @@ def bend_and_twist(surf_pts_scaled, srep_pts_scaled, std_th=np.pi/12, std_ph=np.
 
 
 def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000, 
-                                    scale_std=0.15, th_std=np.pi/12, ph_std=np.pi/8, plydata=False):
+                                    scale_std=0.15, th_std=np.pi/12, ph_std=np.pi/8, 
+                                    gen_imagedata=True, gen_plydata=False):
     
-    args = f"count_{count}-scale_{scale_std}-th_{th_std}-ph_{ph_std}-ply_{plydata}"
+    args = f"count_{count}-scale_{scale_std}-th_{th_std}-ph_{ph_std}-img_{gen_imagedata}-ply_{gen_plydata}"
     with open(os.path.join(data_dir, "args_datagen.txt"), "a") as f:
         f.write(args)
     
-    ellipsoid_spharm_f = os.path.join(template_dir, 'ellipsoid_SPHARM.vtk')
+    # ellipsoid_spharm_f = os.path.join(template_dir, 'ellipsoid_SPHARM.vtk')
+    ellipsoid_spharm_f = os.path.join(template_dir, 'ellipsoid_2000.vtp')
     srep_f = os.path.join(template_dir, 'srep_upsampled.vtp')
-    surf_reader = vtk.vtkPolyDataReader()
+    # surf_reader = vtk.vtkPolyDataReader()
+    surf_reader = vtk.vtkXMLPolyDataReader()
     surf_reader.SetFileName(ellipsoid_spharm_f)
     surf_reader.Update()
     surf = surf_reader.GetOutput()
@@ -126,6 +129,17 @@ def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000,
 
     surf_pts_align, srep_pts_align = center_and_align(surf_pts, srep_pts)
 
+    meta_data_dir = os.path.join(data_dir, "meta_data")
+    surf_imag_dir = os.path.join(data_dir, "image_surf")
+    srep_imag_dir = os.path.join(data_dir, "image_srep")
+    surf_plyf_dir = os.path.join(data_dir, "pointcloud_surf")
+    srep_plyf_dir = os.path.join(data_dir, "pointcloud_srep")
+    
+    for dir in [meta_data_dir, surf_imag_dir, srep_imag_dir, surf_plyf_dir, srep_plyf_dir]:
+        if not os.path.isdir(dir):
+            os.makedirs(dir)
+    
+
     for idx in tqdm(range(1, count+1)):
         surf_pts_scaled, srep_pts_scaled, axis_scales = scale_along_axes(
             surf_pts_align, srep_pts_align, scale_std)
@@ -138,12 +152,12 @@ def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000,
             "theta": th,
             "phi": ph
         }
-        with open(os.path.join(data_dir, f"meta_{idx}.json"), "w") as fp:
+        with open(os.path.join(meta_data_dir, f"meta_{idx}.json"), "w") as fp:
             json.dump(metadata, fp)
 
-        if plydata:
-            surf_ply_f = os.path.join(data_dir, f'surf_{idx}.ply')
-            srep_ply_f = os.path.join(data_dir, f'srep_{idx}.ply')
+        if gen_plydata:
+            surf_ply_f = os.path.join(surf_plyf_dir, f'surf_{idx}.ply')
+            srep_ply_f = os.path.join(srep_plyf_dir, f'srep_{idx}.ply')
             # Write out the ellipsoid surface points as a ply file
             pcd_surf = o3d.geometry.PointCloud()
             pcd_surf.points = o3d.utility.Vector3dVector(surf_pts_bt)
@@ -152,18 +166,19 @@ def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000,
             pcd_srep = o3d.geometry.PointCloud()
             pcd_srep.points = o3d.utility.Vector3dVector(srep_pts_bt)
             o3d.io.write_point_cloud(srep_ply_f, pcd_srep)
-        else:                
+        
+        if gen_imagedata:                
             surf.GetPoints().SetData(numpy_support.numpy_to_vtk(surf_pts_bt))
             w = vtk.vtkXMLPolyDataWriter()
             # w.SetFileName(f'surf_{xscale}_{yscale}_{zscale}_{th}_{ph}.vtp')
-            surf_vtp_f = os.path.join(data_dir, f'surf_{idx}.vtp')
+            surf_vtp_f = os.path.join(meta_data_dir, f'surf_{idx}.vtp')
             w.SetFileName(surf_vtp_f)
             w.SetInputData(surf)
             w.Update()
 
             srep.GetPoints().SetData(numpy_support.numpy_to_vtk(srep_pts_bt))
             w = vtk.vtkXMLPolyDataWriter()
-            srep_vtp_f = os.path.join(data_dir, f'srep_{idx}.vtp')
+            srep_vtp_f = os.path.join(meta_data_dir, f'srep_{idx}.vtp')
             w.SetFileName(srep_vtp_f)
             w.SetInputData(srep)
             w.Update()
@@ -195,7 +210,7 @@ def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000,
             m2b.SetOutsideValue(0)
             m2b.Update()
 
-            surf_nrrd_f = os.path.join(data_dir, f'surf_{idx}.nrrd')
+            surf_nrrd_f = os.path.join(surf_imag_dir, f'surf_{idx}.nrrd')
             itk.imwrite(m2b.GetOutput(), surf_nrrd_f, compression=True)
 
             # Convert s-rep to binary image
@@ -216,7 +231,7 @@ def create_deformed_ellipsoid_pairs(template_dir, data_dir, count=1000,
             im2 = itk.binary_dilate_image_filter(im2, radius=1, foreground_value=1)
             im2 = itk.binary_morphological_closing_image_filter(
                 im2, radius=1, foreground_value=1)
-            srep_nrrd_f = os.path.join(data_dir, f'srep_{idx}.nrrd')
+            srep_nrrd_f = os.path.join(srep_imag_dir, f'srep_{idx}.nrrd')
             itk.imwrite(im2, srep_nrrd_f, compression=True)
 
 
@@ -233,13 +248,14 @@ def main(args):
     ph_std = np.pi / args.stdph
     template_dir = "./template/"
     create_deformed_ellipsoid_pairs(
-        template_dir, datadir, num_samples, scale_std, th_std, ph_std, args.ply)
+        template_dir, datadir, num_samples, scale_std, th_std, ph_std, 
+        gen_imagedata=args.img, gen_plydata=args.ply)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', '-d', type=str,
-                        default="../data/train_3d/", help="Path to dataset dir.")
+                        default="../data/ellipsoid_data/", help="Path to dataset dir.")
     parser.add_argument('--count', '-c', type=int,
                         default=1000, help="Number of samples to generate")
     parser.add_argument('--stdscale', '-s', type=float,
@@ -250,6 +266,8 @@ if __name__ == "__main__":
     parser.add_argument('--stdph', '-p', type=int,
                         default=8, help="positive integer denominator used in std dev for sampling the twist angle phi." +
                         "E.g if args.stdph == 4, then std dev is PI/4. Default is PI/8")
+    parser.add_argument('--img', action='store_true',
+                        help="If specified, create a dataset of image files for the surf/srep paird")
     parser.add_argument('--ply', action='store_true',
                         help="If specified, create a dataset of ply files (point clouds) for the surf/srep paird")
 

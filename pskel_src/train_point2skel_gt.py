@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 # from models.skel_point_net import SkelPointNet
 from SkelPointNet import SkelPointNet
-from DataUtil import PCDataset
+from DataUtil import PCDataset, EllipsoidPcDataset
 import FileRW as rw
 
 sys.path.append("..")
@@ -86,7 +86,9 @@ def main(args):
     with open(os.path.join(experiment_dir, "specs.json"), "r") as f:
         specs = json.load(f)
 
-    data_dir = specs["DataSource"]
+    base_data_dir = specs["BaseDataSource"]
+    data_dir = os.path.join(base_data_dir, "pointcloud_surf")
+    label_dir = os.path.join(base_data_dir, "pointcloud_srep")
     if not os.path.isdir(data_dir):
         print(
             f"The provided data dir in specs.json is invalid! {data_dir} is not found on this system."
@@ -94,7 +96,7 @@ def main(args):
         print("Exiting...")
         return 0
 
-    learning_rate = specs["LearningRate"]
+    learning_rate = specs["LearningRateSpn"]
     batch_size = specs["BatchSize"]
     to_normalize = specs["Normalize"]
     epochs_pretrain = specs["EpochsPreTrain"]
@@ -105,6 +107,8 @@ def main(args):
     # Assume Training/Test split file (given as cmd line arg) will be present in the experiment dir
     pc_list_file = os.path.join(experiment_dir, split_file)
 
+    weight_w1 = 0.3
+    weight_w2 = 0.4
     # intialize network, optimizer, tensorboard
     model_skel = SkelPointNet(
         num_skel_points=skelpoint_num, input_channels=0, use_xyz=True
@@ -124,7 +128,13 @@ def main(args):
 
     # load data and train
     pc_list = rw.load_data_id(pc_list_file)
-    train_data = PCDataset(pc_list, data_dir, point_num, to_normalize)
+    label_list = rw.load_label_id(pc_list_file)
+    # train_data = PCDataset(pc_list, data_dir, point_num, to_normalize)
+    train_data = EllipsoidPcDataset(
+        pc_list, label_list, 
+        data_dir, label_dir,
+        point_num, to_normalize
+        )
     train_loader = DataLoader(
         dataset=train_data, batch_size=batch_size, shuffle=True, drop_last=True
     )
@@ -154,10 +164,12 @@ def main(args):
     print("Begin Training....")
     for epoch in tqdm(range(starting_epoch, total_epochs + 1)):
         loss_epoch = 0
+        loss_gt_epoch = 0
         print(f"\n-----Epoch={epoch}-----")
         for _, batch_data in enumerate(tqdm(train_loader)):
-            batch_id, batch_pc = batch_data
+            batch_id, batch_pc, batch_label = batch_data
             batch_pc = batch_pc.cuda().float()
+            batch_label = batch_label.cuda().float()
 
             optimizer_skel.zero_grad()
             skel_xyz, skel_r, _ = model_skel(batch_pc, compute_graph=False)
@@ -169,21 +181,27 @@ def main(args):
             #### train skeletal point network with geometric losses
             else:
                 loss = model_skel.compute_loss(
-                    batch_pc, skel_xyz, skel_r, None, 0.3, 0.4
+                    batch_pc, skel_xyz, skel_r, None, w1=weight_w1, w2=weight_w2, 
+                    srep_xyz=batch_label, use_mod_loss=False
                 )
+                loss_gt = model_skel.compute_supervised_loss(batch_label, skel_xyz)
+                loss += loss_gt
+                loss_gt_epoch += loss_gt.item()
                 tb_loss_tag = "SkeletalPoint/loss_skel"
                 tb_epoch = epoch - epochs_pretrain + 1
             loss.backward()
             optimizer_skel.step()
             loss_epoch += loss.item()
-            if epoch % save_epoch == 0:
-                save_results(eval_dir, batch_id, epoch, batch_pc, skel_xyz, skel_r)
+            
 
         loss_epoch /= len(train_loader)
+        loss_gt_epoch /= len(train_loader)
         tb_writer.add_scalar(tb_loss_tag, loss_epoch, tb_epoch)
+        tb_writer.add_scalar("GT_Loss", loss_gt_epoch, tb_epoch)
         workspace.save_latest(experiment_dir, epoch, model_skel, optimizer_skel)
 
         if epoch % save_epoch == 0:
+            save_results(eval_dir, batch_id, epoch, batch_pc, skel_xyz, skel_r)
             workspace.save_checkpoint(experiment_dir, epoch, model_skel, optimizer_skel)
 
 
