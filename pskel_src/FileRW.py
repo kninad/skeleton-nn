@@ -289,48 +289,22 @@ def load_off(path):
     return pts, faces
 
 
-def load_ply_points(pc_filepath, expected_point=2000, normalize=False):
-
+def load_ply_points(pc_filepath, expected_point=2000, normalize=False, center=None, scale=None):
     pcd = o3d.io.read_point_cloud(pc_filepath)
     pts = np.asarray(pcd.points)
-    """ORG CODE
-    fopen = open(pc_filepath, 'r', encoding='utf-8')
-    lines = fopen.readlines()
-    pts = np.zeros((expected_point, 3), np.float64)
-
-    total_point = 0
-    feed_point_count = 0
-
-    start_point_data = False
-    for line in tqdm(lines):
-        word = line.split()
-        if word[0] == 'element' and word[1] == 'vertex':
-            total_point = int(word[2])
-            # if expected_point > total_point:
-            #     pts = np.zeros((total_point, 3), np.float64)
-            # continue
-
-        if start_point_data == True:
-            pts[feed_point_count, :] = np.float64(word[0:3])
-            feed_point_count += 1
-
-        if word[0] == 'end_header':
-            start_point_data = True
-
-        if feed_point_count >= expected_point:
-            break
-
-    fopen.close()
-    """
     if pts.shape[0] < expected_point:
         raise AssertionError(
             f"Given point cloud has < {expected_point} number of pts (expected)"
         )
-
     idxs = np.random.randint(pts.shape[0], size=expected_point)
     pts = pts[idxs, :]
     if normalize:
-        pts -= np.mean(pts, axis=0)
-        max_dist = np.max(np.linalg.norm(pts, axis=1))
-        pts /= max_dist
-    return pts
+        if center and scale:
+            pts -= center
+            pts /= scale
+        else:
+            center = np.mean(pts, axis=0)
+            pts -= center
+            max_dist = np.max(np.linalg.norm(pts, axis=1))
+            pts /= max_dist
+    return pts, center, max_dist

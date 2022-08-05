@@ -3,6 +3,9 @@ import numpy as np
 from torch.utils.data import Dataset
 from monai.data import image_reader
 from skimage.segmentation import find_boundaries
+import json
+import vtk
+from vtk.util import numpy_support
 import FileRW as rw
 
 
@@ -15,7 +18,7 @@ class PCDataset(Dataset):
 
     def __getitem__(self, index):
         fpath = os.path.join(self.data_folder, self.data_id[index] + ".ply")
-        data_pc = rw.load_ply_points(fpath, self.point_num, self.to_normalize)
+        data_pc, _, _ = rw.load_ply_points(fpath, self.point_num, self.to_normalize)
         return index, data_pc
 
     def __len__(self):
@@ -33,9 +36,11 @@ class EllipsoidPcDataset(Dataset):
 
     def __getitem__(self, index):
         fpath = os.path.join(self.data_folder, self.data_id[index] + ".ply")
-        data_pc = rw.load_ply_points(fpath, self.point_num, self.to_normalize)
+        data_pc, data_center, data_scale = rw.load_ply_points(fpath, self.point_num, self.to_normalize)
         label_fpath = os.path.join(self.label_folder, self.label_id[index] + ".ply")
-        label_pc = rw.load_ply_points(label_fpath, self.point_num, self.to_normalize)
+        # Use the center and scale used to normalize data to also normalize the label point cloud
+        # Ensures that the both data and label are in the same coordinate system
+        label_pc, _, _ = rw.load_ply_points(label_fpath, center=data_center, scale=data_scale)
         return index, data_pc, label_pc
 
     def __len__(self):
