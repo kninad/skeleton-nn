@@ -305,6 +305,6 @@ def load_ply_points(pc_filepath, expected_point=2000, normalize=False, center=No
         else:
             center = np.mean(pts, axis=0)
             pts -= center
-            max_dist = np.max(np.linalg.norm(pts, axis=1))
-            pts /= max_dist
-    return pts, center, max_dist
+            scale = np.max(np.linalg.norm(pts, axis=1))
+            pts /= scale
+    return pts, center, scale
