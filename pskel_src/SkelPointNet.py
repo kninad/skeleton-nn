@@ -315,4 +315,4 @@ class SkelPointNet(nn.Module):
                 known_Mask,
             )
         else:
-            return skel_xyz, skel_r, shape_cmb_features
+            return skel_xyz, skel_r, shape_cmb_features, weights, sample_xyz

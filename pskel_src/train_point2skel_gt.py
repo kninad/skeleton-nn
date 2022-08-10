@@ -172,7 +172,7 @@ def main(args):
             batch_label = batch_label.cuda().float()
 
             optimizer_skel.zero_grad()
-            skel_xyz, skel_r, _ = model_skel(batch_pc, compute_graph=False)
+            skel_xyz, skel_r, *_ = model_skel(batch_pc, compute_graph=False)
             ### pre-train skeletal point network
             if epoch <= epochs_pretrain:
                 loss = model_skel.compute_loss_pre(batch_pc, skel_xyz)
