@@ -3,18 +3,24 @@ import sys
 import json
 import glob
 
+import vtk
+import pyvista as pv
+
 import torch
 import numpy as np
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from DataUtil import Srep
+from SkelPointNet import SkelPointNet 
+from DataUtil import Srep, HippocampiProcessedData, LeafletData
 import FileRW as rw
 import DistFunc as DF
 
 sys.path.insert(0, "../")
 import utils.misc as workspace
 
+
+### Util Functions ###
 
 def log_results_label(log_path, batch_id, input_xyz, skel_xyz, skel_r, label_xyz):
     batch_size = skel_xyz.size()[0]
@@ -127,7 +133,9 @@ def compute_metrics_bdry_srep(batch_id, batch_meta, input_xyz, skel_xyz):
     return cd, hd
 
 
-def test_results(experiment_dir, eval_dataset, model, save_results=False):
+### Core Test Script ###
+
+def test_results(experiment_dir, eval_dataset, model, save_results=False, view_vtk=False):
     eval_save_dir = os.path.join(experiment_dir, workspace.evaluation_subdir, "hipp")
     rw.check_and_create_dirs([eval_save_dir])
 
@@ -194,6 +202,14 @@ def test_results(experiment_dir, eval_dataset, model, save_results=False):
                     skel_r,
                     batch_label
                 )
+            if view_vtk:
+                view_results_vtk(
+                    batch_id,
+                    batch_meta,
+                    skel_xyz,
+                    skel_r,
+                    spokes
+                )
 
     N = len(eval_dataset)
     label_loss_cd /= N
@@ -218,3 +234,104 @@ def test_results(experiment_dir, eval_dataset, model, save_results=False):
     print(label_loss_cd, label_loss_hd)
 
 
+### VTK Vizualization Code ###
+
+def view_results_vtk(batch_id, batch_meta, skel_xyz, skel_r, spoke_xyz):
+    batch_size = skel_xyz.size()[0]
+    batch_id = batch_id.numpy()
+    skel_xyz_save = skel_xyz.detach().cpu().numpy()
+    skel_r_save = skel_r.detach().cpu().numpy()
+    spoke_xyz_save = spoke_xyz.detach().cpu().numpy()
+    for i in range(batch_size):
+        scale = batch_meta['scale'][i].detach().cpu().numpy()
+        offset = batch_meta['offset'][i].detach().cpu().numpy()
+        input_f = batch_meta['input_f'][i]
+        # get implied boundary, and obtain its vtk polyData form
+        pred_bdry = implied_boundary_single(
+            skel_xyz_save[i], spoke_xyz_save[i], skel_r_save[i]
+        )
+        tf_skel = skel_xyz_save[i] * scale + offset
+        tf_bdry = pred_bdry * scale + offset
+        output_skel = get_vtk_srep_mesh(tf_skel, tf_bdry)
+        # read input mesh (.vtk file)
+        reader = vtk.vtkPolyDataReader()
+        reader.SetFileName(input_f)
+        reader.Update()
+        input_mesh = reader.GetOutput()
+        view_vtk_combined(output_skel, input_mesh)
+
+
+def get_vtk_srep_mesh(skel_pts, bdry_pts):
+    '''
+    Input
+        skel_pts : (N, 3) skeleton points
+        spoke_dirs : (N, 3) unit vectors for spoke direction
+        radii : (N, 1) radius of medial spheres
+    '''
+    srep_poly = vtk.vtkPolyData()
+    srep_pts = vtk.vtkPoints()
+    srep_cells = vtk.vtkCellArray()
+
+    for i in range(skel_pts.shape[0]):
+        id_s = srep_pts.InsertNextPoint(skel_pts[i, :])
+        id_b = srep_pts.InsertNextPoint(bdry_pts[i, :])
+
+        tmp_spoke = vtk.vtkLine()
+        tmp_spoke.GetPointIds().SetId(0, id_s)
+        tmp_spoke.GetPointIds().SetId(1, id_b)
+        srep_cells.InsertNextCell(tmp_spoke)
+
+    srep_poly.SetPoints(srep_pts)
+    srep_poly.SetLines(srep_cells)
+    return srep_poly
+
+
+def view_vtk_combined(srep, mesh):
+    plt = pv.Plotter()
+    plt.add_mesh(mesh, color='white', opacity=0.2)
+    plt.add_mesh(srep)
+    plt.show()
+
+
+if __name__ == "__main__":
+
+    # Test Code
+
+    EXP_NAME = "gt-full5000-pskel100-finetune_hipp"
+    experiment_dir = os.path.join("../experiments/", EXP_NAME)
+    checkpoint = 'latest'
+    with open(os.path.join(experiment_dir, "specs.json"), "r") as f:
+        specs = json.load(f)
+    
+    point_num = specs["InputPointNum"]
+    skelpoint_num = specs["SkelPointNum"]
+    to_normalize = specs["Normalize"]
+    gpu = "0"
+    model_skel = SkelPointNet(
+        num_skel_points=skelpoint_num, input_channels=0, use_xyz=True
+    )
+    if torch.cuda.is_available():
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpu
+        print("GPU Number:", torch.cuda.device_count(), "GPUs!")
+        model_skel.cuda()
+        model_skel.eval()
+    # Load the saved model
+    model_epoch = workspace.load_model_checkpoint(
+        experiment_dir, checkpoint, model_skel
+    )
+    print(f"Evaluating model on using checkpoint={checkpoint} and epoch={model_epoch}.")
+    # load data and evaluate
+    data_dir = "../data/hippocampi_processed/"
+    data_list = sorted(
+        glob.glob(os.path.join(data_dir, "surfaces", "*_surf_SPHARM.vtk"))
+    )
+    label_list = sorted(glob.glob(os.path.join(data_dir, "sreps", "*.srep.json")))
+    idx_end = int(len(data_list) * 0.9)
+    data_list_eval = data_list[idx_end:]
+    label_list_eval = label_list[idx_end:]
+
+    eval_data = HippocampiProcessedData(
+        data_list_eval, label_list_eval, point_num, load_in_ram=True
+    )
+
+    test_results(experiment_dir, eval_data, model_skel, view_vtk=True)
