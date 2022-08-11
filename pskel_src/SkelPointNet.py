@@ -8,13 +8,29 @@ import DistFunc as DF
 
 
 class SkelPointNet(nn.Module):
-    def __init__(self, num_skel_points, input_channels=3, use_xyz=True):
+    def __init__(
+        self,
+        num_skel_points,
+        input_channels=3,
+        use_xyz=True,
+        flag_supervision=False,
+        flag_spread=False,
+        flag_radius=False,
+        flag_medial=False,
+        flag_spoke=False,
+    ):
 
         super(SkelPointNet, self).__init__()
         self.point_dim = 3
         self.num_skel_points = num_skel_points
-
         self.input_channels = input_channels
+
+        self.flag_supervision = flag_supervision
+        self.flag_spread = flag_spread
+        self.flag_radius = flag_radius
+        self.flag_medial = flag_medial
+        self.flag_spoke = flag_spoke
+
         self.SA_modules = nn.ModuleList()
 
         self.SA_modules.append(
@@ -100,18 +116,26 @@ class SkelPointNet(nn.Module):
         self.cvx_weights_mlp = nn.Sequential(*cvx_weights_modules)
 
     def compute_spread_loss(self, skel_xyz):
-        '''
+        """
         Input:
             skel_xyz : Shape [B, N, 3]
         
         cdist computes a [B,N,N] matrix and we avg over each batch index (dim=(1,2))
         and then sum over the avgs for each batch input.
         Negative size to encourage higher avg pairwise distance (more spread)
-        '''
-        return -torch.sum(torch.mean(torch.cdist(skel_xyz, skel_xyz), dim=(1,2)))
-        
+        """
+        if self.flag_spread:
+            return -torch.sum(torch.mean(torch.cdist(skel_xyz, skel_xyz), dim=(1, 2)))
+        else:
+            return 0
 
     def compute_supervised_loss(self, srep_xyz, skel_xyz):
+        if self.flag_supervision and (not srep_xyz):
+            raise AssertionError(
+                "Either flag_supervision condition mis-specified or null g.t srep tensor!"
+            )
+        if not self.flag_supervision:
+            return 0
         srep_pnum = float(srep_xyz.size()[1])
         skel_pnum = float(skel_xyz.size()[1])
         cd_srep_to_skel = DF.closest_distance_with_batch(srep_xyz, skel_xyz) / srep_pnum
@@ -119,50 +143,45 @@ class SkelPointNet(nn.Module):
         return cd_skel_to_srep + cd_srep_to_skel
 
     def compute_loss(
-        self,
-        shape_xyz,
-        skel_xyz,
-        skel_radius,
-        A,
-        w1,
-        w2,
-        srep_xyz=None,
-        w3=0,
-        lap_reg=False,
-        use_mod_loss=False,
-        w_closest=0.6,
+        self, shape_xyz, skel_xyz, skel_radius, spokes, w1, w2, w3, srep_xyz=None,
     ):
         skel_pnum = float(skel_xyz.size()[1])
 
         # sampling loss
-        loss_sample = self.get_sampling_loss(shape_xyz, skel_xyz, skel_radius)
+        loss_sample = self.get_sampling_loss(shape_xyz, skel_xyz, skel_radius, spokes)
 
         # point2sphere loss
-        loss_point2sphere = self.get_point2sphere_loss(
-            shape_xyz, skel_xyz, skel_radius, use_mod_loss, w_closest
-        )
+        loss_point2sphere = self.get_point2sphere_loss(shape_xyz, skel_xyz, skel_radius)
 
         # radius loss
         loss_radius = -torch.sum(skel_radius) / skel_pnum
 
-        # loss combination
-        final_loss = loss_sample + loss_point2sphere * w1 + loss_radius * w2
+        # supervision (returns 0 if flag_supervision is False)
+        loss_gt = self.compute_supervised_loss(srep_xyz, skel_xyz)
+
+        # skel_pts inter distance loss (returns 0 if flag_spread is False)
+        loss_spread = self.compute_spread_loss(skel_xyz)
+
+        # Final loss combination
+        final_loss = (
+            loss_gt
+            + loss_sample
+            + loss_point2sphere * w1
+            + loss_radius * w2
+            + loss_spread * w3
+        )
         return final_loss
 
-    def get_point2sphere_loss(
-        self, shape_xyz, skel_xyz, skel_radius, use_mod_loss, w_closest
-    ):
+    def get_point2sphere_loss(self, shape_xyz, skel_xyz, skel_radius, topK=3):
         shape_pnum = float(shape_xyz.size()[1])
         skel_pnum = float(skel_xyz.size()[1])
         skel_xyzr = torch.cat((skel_xyz, skel_radius), 2)
         cd_point2pshere1 = (
             DF.point2sphere_distance_with_batch(shape_xyz, skel_xyzr) / shape_pnum
         )
-        if use_mod_loss:
+        if self.flag_medial:
             cd_point2sphere2 = (
-                DF.modified_sphere2point_distance_with_batch(
-                    skel_xyzr, shape_xyz, w_closest
-                )
+                DF.modified_sphere2point_distance_with_batch(skel_xyzr, shape_xyz, topK)
                 / skel_pnum
             )
         else:
@@ -172,13 +191,21 @@ class SkelPointNet(nn.Module):
         loss_point2sphere = cd_point2pshere1 + cd_point2sphere2
         return loss_point2sphere
 
-    def get_sampling_loss(self, shape_xyz, skel_xyz, skel_radius):
+    def get_sampling_loss(self, shape_xyz, skel_xyz, skel_radius, spokes):
+        if (not spokes) and self.flag_spoke:
+            raise AssertionError(
+                "Either flag_spoke condition mis-specified or null spokes tensor!"
+            )
+
         bn = skel_xyz.size()[0]
         shape_pnum = float(shape_xyz.size()[1])
         skel_pnum = float(skel_xyz.size()[1])
 
         # sampling loss
-        e = 0.57735027
+        if self.flag_spoke:
+            e = 1.0  # we will use the spoke for the direction vector
+        else:
+            e = 0.57735027
         sample_directions = torch.tensor(
             [
                 [e, e, e],
@@ -193,6 +220,10 @@ class SkelPointNet(nn.Module):
         )
         sample_directions = torch.unsqueeze(sample_directions, 0)
         sample_directions = sample_directions.repeat(bn, int(skel_pnum), 1).cuda()
+        if self.flag_spoke:
+            sample_directions = sample_directions * torch.repeat_interleave(
+                spokes, 8, dim=1
+            )
         sample_centers = torch.repeat_interleave(skel_xyz, 8, dim=1)
         sample_radius = torch.repeat_interleave(skel_radius, 8, dim=1)
         sample_xyz = sample_centers + sample_radius * sample_directions
@@ -299,7 +330,7 @@ class SkelPointNet(nn.Module):
         features = pc[..., 3:].transpose(1, 2).contiguous() if pc.size(-1) > 3 else None
         return xyz, features
 
-    def forward(self, input_pc, compute_graph=False):
+    def forward(self, input_pc):
 
         input_pc = input_pc.cuda()
         xyz, features = self.split_point_feature(input_pc)
@@ -312,7 +343,7 @@ class SkelPointNet(nn.Module):
         # convex combinational weights
         weights = self.cvx_weights_mlp(context_features)
 
-        # skeletal points
+        # skeletal points: shape [B, N, 3]
         skel_xyz = torch.sum(weights[:, :, :, None] * sample_xyz[:, None, :, :], dim=2)
 
         # surface features
@@ -322,45 +353,37 @@ class SkelPointNet(nn.Module):
         shape_cmb_features = shape_cmb_features.transpose(1, 2)
 
         # radii
-        min_dists, min_indices = DF.closest_distance_with_batch(
-            sample_xyz, skel_xyz, is_sum=False
-        )
-        skel_r = torch.sum(weights[:, :, :, None] * min_dists[:, None, :, None], dim=2)
+        if self.flag_radius:
+            dist = torch.cdist(skel_xyz, sample_xyz)  # shape [B, N, M]
+            skel_r = torch.sum(weights * dist, dim=2)
+        else:
+            min_dists, min_indices = DF.closest_distance_with_batch(
+                sample_xyz, skel_xyz, is_sum=False
+            )
+            skel_r = torch.sum(
+                weights[:, :, :, None] * min_dists[:, None, :, None], dim=2
+            )
 
         spokes = self._get_spokes(weights, skel_xyz, sample_xyz, topK=1)
 
-        if compute_graph:
-            A, valid_Mask, known_Mask = self.init_graph(input_pc[..., 0:3], skel_xyz)
-            return (
-                skel_xyz,
-                skel_r,
-                sample_xyz,
-                weights,
-                shape_cmb_features,
-                A,
-                valid_Mask,
-                known_Mask,
-            )
-        else:
-            return skel_xyz, skel_r, shape_cmb_features, weights, sample_xyz, spokes
+        return skel_xyz, skel_r, shape_cmb_features, weights, sample_xyz, spokes
 
     def _get_spokes(self, weights, skel_xyz, sample_xyz, topK=2):
-        with torch.no_grad():
-            topK_idxs = torch.argsort(weights, axis=2, descending=True)[
-                :, :, :topK
-            ]  # shape [B, N, K]
-            weit_idxs = torch.gather(weights, dim=2, index=topK_idxs)  # shape [B, N, K]
-            # pairwise difference vector (spoke candidates)
-            diff = -1 * (
-                skel_xyz.unsqueeze(2) - sample_xyz.unsqueeze(1)
-            )  # shape [B, N, M, 3]
-            B, N, M = diff.shape[:-1]  # shape [B, N, K, 3]
+        topK_idxs = torch.argsort(weights, axis=2, descending=True)[
+            :, :, :topK
+        ]  # shape [B, N, K]
+        weit_idxs = torch.gather(weights, dim=2, index=topK_idxs)  # shape [B, N, K]
+        # pairwise difference vector (spoke candidates)
+        diff = -1 * (
+            skel_xyz.unsqueeze(2) - sample_xyz.unsqueeze(1)
+        )  # shape [B, N, M, 3]
+        B, N, M = diff.shape[:-1]  # shape [B, N, K, 3]
 
-            res = torch.empty(B, N, topK, 3, device="cuda:0")
-            for i in range(3):
-                res[:, :, :, i] = torch.gather(diff[:, :, :, i], dim=2, index=topK_idxs)
+        res = torch.empty(B, N, topK, 3, device="cuda:0")
+        for i in range(3):
+            res[:, :, :, i] = torch.gather(diff[:, :, :, i], dim=2, index=topK_idxs)
 
-            weighted_diff = weit_idxs.unsqueeze(3) * res  # shape [B, N, K, 3]
-            spokes = torch.sum(weighted_diff, axis=2)
-            spokes = F.normalize(spokes, p=2, dim=2)
+        weighted_diff = weit_idxs.unsqueeze(3) * res  # shape [B, N, K, 3]
+        spokes = torch.sum(weighted_diff, axis=2)
+        spokes = F.normalize(spokes, p=2, dim=2)
         return spokes
