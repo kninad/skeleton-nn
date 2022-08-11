@@ -135,8 +135,8 @@ def compute_metrics_bdry_srep(batch_id, batch_meta, input_xyz, skel_xyz):
 
 ### Core Test Script ###
 
-def test_results(experiment_dir, eval_dataset, model, save_results=False, view_vtk=False):
-    eval_save_dir = os.path.join(experiment_dir, workspace.evaluation_subdir, "hipp")
+def test_results(experiment_dir, eval_dataset, model, save_results=False, view_vtk=False, srep_res=False):
+    eval_save_dir = os.path.join(experiment_dir, workspace.evaluation_subdir, "eval")
     rw.check_and_create_dirs([eval_save_dir])
 
     data_loader = DataLoader(
@@ -159,7 +159,7 @@ def test_results(experiment_dir, eval_dataset, model, save_results=False, view_v
         batch_id, batch_pc, batch_label, batch_meta = batch_data
         batch_pc = batch_pc.cuda().float()
         with torch.no_grad():
-            skel_xyz, skel_r, _, _, _, spokes = model(batch_pc, compute_graph=False)
+            skel_xyz, skel_r, spokes, *_ = model(batch_pc)
 
             # Cdist and Hdist between the input boundary points and
             # predicted boundary points
@@ -177,21 +177,22 @@ def test_results(experiment_dir, eval_dataset, model, save_results=False, view_v
             label_loss_cd += cd_batch_srep
             label_loss_hd += hd_batch_srep
 
-            # Cdist and Hdist between srep bdry pts and
-            # predicted bdry points
-            cd_batch_diff, hd_batch_diff = compute_metrics_bdry_diff(
-                batch_id, batch_meta, skel_xyz, skel_r, spokes
-            )
-            diff_cd += cd_batch_diff
-            diff_hd += hd_batch_diff
+            if srep_res:
+                # # Cdist and Hdist between srep bdry pts and
+                # # predicted bdry points
+                cd_batch_diff, hd_batch_diff = compute_metrics_bdry_diff(
+                    batch_id, batch_meta, skel_xyz, skel_r, spokes
+                )
+                diff_cd += cd_batch_diff
+                diff_hd += hd_batch_diff
 
-            # Cdist and Hdist between srep bdry pts and
-            # input boundary points
-            cd_batch_srepbdry, hd_batch_srepbdry = compute_metrics_bdry_srep(
-                batch_id, batch_meta, batch_pc, skel_xyz
-            )
-            srep_bdry_cd += cd_batch_srepbdry
-            srep_bdry_hd += hd_batch_srepbdry
+                # # Cdist and Hdist between srep bdry pts and
+                # # input boundary points
+                cd_batch_srepbdry, hd_batch_srepbdry = compute_metrics_bdry_srep(
+                    batch_id, batch_meta, batch_pc, skel_xyz
+                )
+                srep_bdry_cd += cd_batch_srepbdry
+                srep_bdry_hd += hd_batch_srepbdry
 
             if save_results:
                 log_results_label(
