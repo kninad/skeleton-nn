@@ -99,6 +99,18 @@ class SkelPointNet(nn.Module):
 
         self.cvx_weights_mlp = nn.Sequential(*cvx_weights_modules)
 
+    def compute_spread_loss(self, skel_xyz):
+        '''
+        Input:
+            skel_xyz : Shape [B, N, 3]
+        
+        cdist computes a [B,N,N] matrix and we avg over each batch index (dim=(1,2))
+        and then sum over the avgs for each batch input.
+        Negative size to encourage higher avg pairwise distance (more spread)
+        '''
+        return -torch.sum(torch.mean(torch.cdist(skel_xyz, skel_xyz), dim=(1,2)))
+        
+
     def compute_supervised_loss(self, srep_xyz, skel_xyz):
         srep_pnum = float(srep_xyz.size()[1])
         skel_pnum = float(skel_xyz.size()[1])
@@ -315,7 +327,7 @@ class SkelPointNet(nn.Module):
         )
         skel_r = torch.sum(weights[:, :, :, None] * min_dists[:, None, :, None], dim=2)
 
-        spokes = self._get_spokes(weights, skel_xyz, sample_xyz, topK=2)
+        spokes = self._get_spokes(weights, skel_xyz, sample_xyz, topK=1)
 
         if compute_graph:
             A, valid_Mask, known_Mask = self.init_graph(input_pc[..., 0:3], skel_xyz)
