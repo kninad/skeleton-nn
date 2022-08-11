@@ -299,7 +299,7 @@ def load_ply_points(pc_filepath, expected_point=2000, normalize=False, center=No
     idxs = np.random.randint(pts.shape[0], size=expected_point)
     pts = pts[idxs, :]
     if normalize:
-        if center and scale:
+        if (center is not None) and (scale is not None):
             pts -= center
             pts /= scale
         else:
