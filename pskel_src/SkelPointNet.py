@@ -130,7 +130,7 @@ class SkelPointNet(nn.Module):
             return 0
 
     def compute_supervised_loss(self, srep_xyz, skel_xyz):
-        if self.flag_supervision and (not srep_xyz):
+        if self.flag_supervision and (srep_xyz is None):
             raise AssertionError(
                 "Either flag_supervision condition mis-specified or null g.t srep tensor!"
             )
@@ -192,7 +192,7 @@ class SkelPointNet(nn.Module):
         return loss_point2sphere
 
     def get_sampling_loss(self, shape_xyz, skel_xyz, skel_radius, spokes):
-        if (not spokes) and self.flag_spoke:
+        if (spokes is None) and self.flag_spoke:
             raise AssertionError(
                 "Either flag_spoke condition mis-specified or null spokes tensor!"
             )
@@ -355,7 +355,7 @@ class SkelPointNet(nn.Module):
         # radii
         if self.flag_radius:
             dist = torch.cdist(skel_xyz, sample_xyz)  # shape [B, N, M]
-            skel_r = torch.sum(weights * dist, dim=2)
+            skel_r = torch.sum(weights * dist, dim=2).unsqueeze(2)
         else:
             min_dists, min_indices = DF.closest_distance_with_batch(
                 sample_xyz, skel_xyz, is_sum=False
@@ -366,7 +366,7 @@ class SkelPointNet(nn.Module):
 
         spokes = self._get_spokes(weights, skel_xyz, sample_xyz, topK=1)
 
-        return skel_xyz, skel_r, shape_cmb_features, weights, sample_xyz, spokes
+        return skel_xyz, skel_r, spokes, shape_cmb_features, weights, sample_xyz
 
     def _get_spokes(self, weights, skel_xyz, sample_xyz, topK=2):
         topK_idxs = torch.argsort(weights, axis=2, descending=True)[
