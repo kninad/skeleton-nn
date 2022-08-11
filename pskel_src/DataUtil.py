@@ -41,7 +41,11 @@ class EllipsoidPcDataset(Dataset):
         # Use the center and scale used to normalize data to also normalize the label point cloud
         # Ensures that the both data and label are in the same coordinate system
         label_pc, _, _ = rw.load_ply_points(label_fpath, center=data_center, scale=data_scale)
-        return index, data_pc, label_pc
+        meta = {
+            "scale": data_scale,
+            "offset": data_center
+        }
+        return index, data_pc, label_pc, meta
 
     def __len__(self):
         return len(self.data_id)
@@ -100,15 +104,20 @@ class HippocampiProcessedData(Dataset):
         self.point_num = point_num
         self.load_in_ram = load_in_ram
         if load_in_ram:
-            self.data_pc, self.label_pc = self.preprocess()
+            self.data_pc, self.label_pc, self.meta_info = self.preprocess()
 
     def __getitem__(self, index):
         if self.load_in_ram:
-            return index, self.data_pc[index], self.label_pc[index]
+            return index, self.data_pc[index], self.label_pc[index], self.meta_info[index]
         else:
             data, center, scale = self.load_data(index)
             label = self.load_label(index, center, scale)
-            return index, data, label
+            meta = {
+                "scale": scale,
+                "offset": center,
+                "label_f": self.label_list[index]
+            }
+            return index, data, label, meta
 
     def __len__(self):
         return len(self.data_list)
@@ -116,12 +125,19 @@ class HippocampiProcessedData(Dataset):
     def preprocess(self):
         data_samples = []
         label_samples = []
+        meta_samples = []
         for idx in range(len(self.data_list)):
             data, center, scale = self.load_data(idx)
             label = self.load_label(idx, center, scale)
+            meta = {
+                "scale": scale,
+                "offset": center,
+                "label_f": self.label_list[idx]
+            }
             data_samples.append(data)
             label_samples.append(label)
-        return data_samples, label_samples
+            meta_samples.append(meta)
+        return data_samples, label_samples, meta_samples
 
     def load_data(self, index):
         fpath = self.data_list[index]
@@ -181,15 +197,20 @@ class LeafletData(Dataset):
         self.point_num = point_num
         self.load_in_ram = load_in_ram
         if load_in_ram:
-            self.data_pc, self.label_pc = self.preprocess()
+            self.data_pc, self.label_pc, self.meta_info = self.preprocess()
 
     def __getitem__(self, index):
         if self.load_in_ram:
-            return index, self.data_pc[index], self.label_pc[index]
+            return index, self.data_pc[index], self.label_pc[index], self.meta_info[index]
         else:
             data, center, scale = self.load_data(index)
             label = self.load_label(index, center, scale)
-            return index, data, label
+            meta = {
+                "scale": scale,
+                "offset": center,
+                "label_f": self.label_list[index]
+            }
+            return index, data, label, meta
 
     def __len__(self):
         return len(self.data_list)
@@ -197,12 +218,19 @@ class LeafletData(Dataset):
     def preprocess(self):
         data_samples = []
         label_samples = []
+        meta_samples = []
         for idx in range(len(self.data_list)):
             data, center, scale = self.load_data(idx)
             label = self.load_label(idx, center, scale)
+            meta = {
+                "scale": scale,
+                "offset": center,
+                "label_f": self.label_list[idx]
+            }
             data_samples.append(data)
             label_samples.append(label)
-        return data_samples, label_samples
+            meta_samples.append(meta)
+        return data_samples, label_samples, meta_samples
 
     def load_data(self, index):
         fpath = self.data_list[index]
@@ -239,15 +267,16 @@ class LeafletData(Dataset):
 
 class Srep:
 
-    def __init__(self, from_json=True, json_f=None, vtp_dir=None):
-        if from_json:
-            if not json_f:
-                raise ValueError("No valid json file provided!")
-            skel_pts, up_spokes, dn_spokes, crest_pts, crest_spokes = self.extract_srep_json(json_f)
+    def __init__(self, srep_path):
+        if srep_path.endswith('.json'):
+            skel_pts, up_spokes, dn_spokes, crest_pts, crest_spokes = self.extract_srep_json(srep_path)
         else:
-            if not json_f:
-                raise ValueError("No valid dir provided for vtp files!")
-            skel_pts, up_spokes, dn_spokes, crest_pts, crest_spokes = self.extract_srep_vtp(vtp_dir)
+            # Check if its a *.vtp file path instead of directory -- if so then extract the dir from it.
+            if (not os.path.isdir(srep_path)) and srep_path.endswith('.vtp'):
+                srep_dir = os.path.dirname(srep_path)
+            else:
+                srep_dir = srep_path
+            skel_pts, up_spokes, dn_spokes, crest_pts, crest_spokes = self.extract_srep_vtp(srep_dir)
         
         self.all_points = np.concatenate([skel_pts, crest_pts], axis=0)
         self.skel_pts = skel_pts
