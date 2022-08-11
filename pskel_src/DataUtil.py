@@ -115,7 +115,8 @@ class HippocampiProcessedData(Dataset):
             meta = {
                 "scale": scale,
                 "offset": center,
-                "label_f": self.label_list[index]
+                "label_f": self.label_list[index],
+                "input_f": self.data_list[index]
             }
             return index, data, label, meta
 
@@ -132,7 +133,8 @@ class HippocampiProcessedData(Dataset):
             meta = {
                 "scale": scale,
                 "offset": center,
-                "label_f": self.label_list[idx]
+                "label_f": self.label_list[idx],
+                "input_f": self.data_list[idx]
             }
             data_samples.append(data)
             label_samples.append(label)
@@ -208,7 +210,8 @@ class LeafletData(Dataset):
             meta = {
                 "scale": scale,
                 "offset": center,
-                "label_f": self.label_list[index]
+                "label_f": self.label_list[index],
+                "input_f": self.data_list[index]
             }
             return index, data, label, meta
 
@@ -225,7 +228,8 @@ class LeafletData(Dataset):
             meta = {
                 "scale": scale,
                 "offset": center,
-                "label_f": self.label_list[idx]
+                "label_f": self.label_list[idx],
+                "input_f": self.data_list[idx]
             }
             data_samples.append(data)
             label_samples.append(label)
