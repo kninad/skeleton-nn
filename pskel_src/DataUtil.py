@@ -40,7 +40,7 @@ class EllipsoidPcDataset(Dataset):
         label_fpath = os.path.join(self.label_folder, self.label_id[index] + ".ply")
         # Use the center and scale used to normalize data to also normalize the label point cloud
         # Ensures that the both data and label are in the same coordinate system
-        label_pc, _, _ = rw.load_ply_points(label_fpath, center=data_center, scale=data_scale)
+        label_pc, _, _ = rw.load_ply_points(label_fpath, normalize=self.to_normalize, center=data_center, scale=data_scale)
         meta = {
             "scale": data_scale,
             "offset": data_center
