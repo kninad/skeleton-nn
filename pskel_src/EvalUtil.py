@@ -193,7 +193,7 @@ def test_results(experiment_dir, eval_dataset, model, save_results=False, view_v
                 )
                 srep_bdry_cd += cd_batch_srepbdry
                 srep_bdry_hd += hd_batch_srepbdry
-
+            viz_save_dir = None
             if save_results:
                 log_results_label(
                     eval_save_dir,
@@ -203,6 +203,7 @@ def test_results(experiment_dir, eval_dataset, model, save_results=False, view_v
                     skel_r,
                     batch_label
                 )
+                viz_save_dir = eval_save_dir
             if view_vtk:
                 view_results_vtk(
                     batch_id,
@@ -210,7 +211,8 @@ def test_results(experiment_dir, eval_dataset, model, save_results=False, view_v
                     skel_xyz,
                     skel_r,
                     spokes,
-                    if_xml
+                    if_xml,
+                    viz_save_dir
                 )
 
     N = len(eval_dataset)
@@ -238,7 +240,7 @@ def test_results(experiment_dir, eval_dataset, model, save_results=False, view_v
 
 ### VTK Vizualization Code ###
 
-def view_results_vtk(batch_id, batch_meta, skel_xyz, skel_r, spoke_xyz, xml_data=False):
+def view_results_vtk(batch_id, batch_meta, skel_xyz, skel_r, spoke_xyz, xml_data=False, save_dir=None):
     batch_size = skel_xyz.size()[0]
     batch_id = batch_id.numpy()
     skel_xyz_save = skel_xyz.detach().cpu().numpy()
@@ -263,7 +265,14 @@ def view_results_vtk(batch_id, batch_meta, skel_xyz, skel_r, spoke_xyz, xml_data
         reader.SetFileName(input_f)
         reader.Update()
         input_mesh = reader.GetOutput()
-        view_vtk_combined(output_skel, input_mesh)
+        output_pts = pv.PolyData(tf_skel)
+        if save_dir:
+            pc_f = os.path.join(save_dir, f"{batch_id[i]}_pc")
+            spoke_f = os.path.join(save_dir, f"{batch_id[i]}_spokes")
+        else:
+            pc_f, spoke_f = None, None
+        view_vtk_pc(output_pts, input_mesh, pc_f)
+        view_vtk_spokes(output_skel, input_mesh, spoke_f)
 
 
 def get_vtk_srep_mesh(skel_pts, bdry_pts):
@@ -291,18 +300,35 @@ def get_vtk_srep_mesh(skel_pts, bdry_pts):
     return srep_poly
 
 
-def view_vtk_combined(srep, mesh):
+def view_vtk_spokes(srep, mesh, save_f=None):
     plt = pv.Plotter()
     plt.add_mesh(mesh, color='white', opacity=0.2)
     plt.add_mesh(srep)
-    plt.show()
+    if save_f:
+        plt.export_vtkjs(save_f)
+    else:
+        plt.show()
+
+def view_vtk_pc(srep_pts, mesh, save_f=None):
+    plt = pv.Plotter()
+    plt.add_mesh(mesh, color='white', opacity=0.2)
+    plt.add_points(srep_pts, color='white', point_size=2)
+    if save_f:
+        plt.export_vtkjs(save_f)
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":
 
     # Test Code
+    EXP_TYPE = "leaflet" # "hippocampi" or "leaflet"
 
-    EXP_NAME = "gt-full5000-pskel100-finetune_hipp"
+    if EXP_TYPE == "hippocampi":
+        EXP_NAME = "gt-full5000-pskel100-finetune_1010-hipp"
+    else:
+        EXP_NAME = "gt-full5000-pskel100-finetune_1010-leaf"
+
     experiment_dir = os.path.join("../experiments/", EXP_NAME)
     checkpoint = 'latest'
     with open(os.path.join(experiment_dir, "specs.json"), "r") as f:
@@ -312,9 +338,25 @@ if __name__ == "__main__":
     skelpoint_num = specs["SkelPointNum"]
     to_normalize = specs["Normalize"]
     gpu = "0"
+
+    flag_sup = True  # supervision
+    flags_vec = specs.get("FlagsVec", [])
+    if not flags_vec:
+        flags_vec = [0] * 4
+    flags_boolvec = [x==1 for x in flags_vec]
+    flag_spread, flag_radius, flag_medial, flag_spoke = flags_boolvec
+    print(f"FlagVec: {flags_vec}")
+    print(f"FLAGS: {flag_spread}, {flag_radius}, {flag_medial}, {flag_spoke}!!!")
+
     model_skel = SkelPointNet(
-        num_skel_points=skelpoint_num, input_channels=0, use_xyz=True
+        num_skel_points=skelpoint_num, input_channels=0, use_xyz=True,
+        flag_supervision=flag_sup,
+        flag_spread=flag_spread,
+        flag_radius=flag_radius,
+        flag_medial=flag_medial,
+        flag_spoke=flag_spoke
     )
+
     if torch.cuda.is_available():
         os.environ["CUDA_VISIBLE_DEVICES"] = gpu
         print("GPU Number:", torch.cuda.device_count(), "GPUs!")
@@ -325,18 +367,43 @@ if __name__ == "__main__":
         experiment_dir, checkpoint, model_skel
     )
     print(f"Evaluating model on using checkpoint={checkpoint} and epoch={model_epoch}.")
+    
+    base_data_dir = specs["BaseDataSource"]
+    if EXP_TYPE == "hippocampi":
+        data_dir = os.path.join("../data/", "hippocampi_processed")
+    elif EXP_TYPE == "leaflet":
+        data_dir = os.path.join("../data/", "leaflet_sreps")
+
     # load data and evaluate
-    data_dir = "../data/hippocampi_processed/"
-    data_list = sorted(
-        glob.glob(os.path.join(data_dir, "surfaces", "*_surf_SPHARM.vtk"))
-    )
-    label_list = sorted(glob.glob(os.path.join(data_dir, "sreps", "*.srep.json")))
+    if EXP_TYPE == "hippocampi":
+        data_list = sorted(
+            glob.glob(os.path.join(data_dir, "surfaces", "*_surf_SPHARM.vtk"))
+        )
+        label_list = sorted(glob.glob(os.path.join(data_dir, "sreps", "*.srep.json")))
+    elif EXP_TYPE == "leaflet":
+        case_dirs = sorted(os.listdir(data_dir))
+        data_list = [os.path.join(data_dir, case, "warped_template.vtp") for case in case_dirs]
+        label_list = [os.path.join(data_dir, case, "up_proc.vtp") for case in case_dirs]
+
     idx_end = int(len(data_list) * 0.9)
     data_list_eval = data_list[idx_end:]
     label_list_eval = label_list[idx_end:]
 
-    eval_data = HippocampiProcessedData(
-        data_list_eval, label_list_eval, point_num, load_in_ram=True
-    )
+    if EXP_TYPE == "hippocampi":
+        eval_data = HippocampiProcessedData(
+            data_list_eval, label_list_eval, point_num, load_in_ram=True
+        )
+        use_xml_loader = False
+    elif EXP_TYPE == "leaflet":
+        eval_data = LeafletData(
+            data_list_eval, label_list_eval, point_num, load_in_ram=True
+        )
+        use_xml_loader = True
 
-    test_results(experiment_dir, eval_data, model_skel, view_vtk=True)
+
+    test_results(experiment_dir, eval_data, model_skel, 
+        save_results=True, 
+        view_vtk=True,
+        srep_res=True,
+        if_xml=use_xml_loader
+    )
