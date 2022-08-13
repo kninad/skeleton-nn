@@ -135,7 +135,7 @@ def compute_metrics_bdry_srep(batch_id, batch_meta, input_xyz, skel_xyz):
 
 ### Core Test Script ###
 
-def test_results(experiment_dir, eval_dataset, model, save_results=False, view_vtk=False, srep_res=False):
+def test_results(experiment_dir, eval_dataset, model, save_results=False, view_vtk=False, srep_res=False, if_xml=False):
     eval_save_dir = os.path.join(experiment_dir, workspace.evaluation_subdir, "eval")
     rw.check_and_create_dirs([eval_save_dir])
 
@@ -209,7 +209,8 @@ def test_results(experiment_dir, eval_dataset, model, save_results=False, view_v
                     batch_meta,
                     skel_xyz,
                     skel_r,
-                    spokes
+                    spokes,
+                    if_xml
                 )
 
     N = len(eval_dataset)
@@ -237,7 +238,7 @@ def test_results(experiment_dir, eval_dataset, model, save_results=False, view_v
 
 ### VTK Vizualization Code ###
 
-def view_results_vtk(batch_id, batch_meta, skel_xyz, skel_r, spoke_xyz):
+def view_results_vtk(batch_id, batch_meta, skel_xyz, skel_r, spoke_xyz, xml_data=False):
     batch_size = skel_xyz.size()[0]
     batch_id = batch_id.numpy()
     skel_xyz_save = skel_xyz.detach().cpu().numpy()
@@ -255,7 +256,10 @@ def view_results_vtk(batch_id, batch_meta, skel_xyz, skel_r, spoke_xyz):
         tf_bdry = pred_bdry * scale + offset
         output_skel = get_vtk_srep_mesh(tf_skel, tf_bdry)
         # read input mesh (.vtk file)
-        reader = vtk.vtkPolyDataReader()
+        if xml_data:
+            reader = vtk.vtkXMLPolyDataReader()
+        else:
+            reader = vtk.vtkPolyDataReader()
         reader.SetFileName(input_f)
         reader.Update()
         input_mesh = reader.GetOutput()
