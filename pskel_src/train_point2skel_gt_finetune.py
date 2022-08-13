@@ -121,11 +121,34 @@ def main(args):
     point_num = specs["InputPointNum"]
     skelpoint_num = specs["SkelPointNum"]
 
-    weight_w1 = 0.3
-    weight_w2 = 0.4
+    flag_sup = True  # supervision
+    # flags_vec = specs.get("FlagsVec", [])
+    # if not flags_vec:
+    #     flags_vec = [0] * 4
+    # SET IT MANUALLY AFTER THE ABLATION STUDY
+    flags_vec = [1,0,1,0]
+    flags_boolvec = [x==1 for x in flags_vec]
+    flag_spread, flag_radius, flag_medial, flag_spoke = flags_boolvec
+    print(f"FlagVec: {flags_vec}")
+    print(f"FLAGS: {flag_spread}, {flag_radius}, {flag_medial}, {flag_spoke}!!!")
+    # flag_spread = specs.get("FlagSpread", False)
+    # flag_radius = specs.get("FlagRadius", False)
+    # flag_medial = specs.get("FlagMedial", False)
+    # flag_spoke = specs.get("FlagSpoke", False)
+
+    weight_p2sphere = 0.3
+    weight_radius = 0.4
+    weight_spread = 0.2
     # intialize network, optimizer, tensorboard
     model_skel = SkelPointNet(
-        num_skel_points=skelpoint_num, input_channels=0, use_xyz=True
+        num_skel_points=skelpoint_num,
+        input_channels=0,
+        use_xyz=True,
+        flag_supervision=flag_sup,
+        flag_spread=flag_spread,
+        flag_radius=flag_radius,
+        flag_medial=flag_medial,
+        flag_spoke=flag_spoke
     )
     optimizer_skel = torch.optim.Adam(model_skel.parameters(), lr=learning_rate)
     if torch.cuda.is_available():
@@ -203,12 +226,12 @@ def main(args):
         loss_gt_epoch = 0
         print(f"\n-----Epoch={epoch}-----")
         for _, batch_data in enumerate(tqdm(train_loader)):
-            batch_id, batch_pc, batch_label = batch_data
+            batch_id, batch_pc, batch_label, *_ = batch_data
             batch_pc = batch_pc.cuda().float()
             batch_label = batch_label.cuda().float()
 
             optimizer_skel.zero_grad()
-            skel_xyz, skel_r, *_ = model_skel(batch_pc, compute_graph=False)
+            skel_xyz, skel_r, spoke_xyz, *_ = model_skel(batch_pc)
             ### pre-train skeletal point network
             if epoch <= epochs_pretrain:
                 loss = model_skel.compute_loss_pre(batch_pc, skel_xyz)
@@ -220,15 +243,12 @@ def main(args):
                     batch_pc,
                     skel_xyz,
                     skel_r,
-                    None,
-                    w1=weight_w1,
-                    w2=weight_w2,
-                    srep_xyz=batch_label,
-                    use_mod_loss=False,
+                    spoke_xyz,
+                    w1=weight_p2sphere,
+                    w2=weight_radius,
+                    w3=weight_spread,
+                    srep_xyz=batch_label
                 )
-                loss_gt = model_skel.compute_supervised_loss(batch_label, skel_xyz)
-                loss += loss_gt
-                loss_gt_epoch += loss_gt.item()
                 tb_loss_tag = "SkeletalPoint/loss_skel"
                 tb_epoch = epoch - epochs_pretrain + 1
             loss.backward()
@@ -238,7 +258,6 @@ def main(args):
         loss_epoch /= len(train_loader)
         loss_gt_epoch /= len(train_loader)
         tb_writer.add_scalar(tb_loss_tag, loss_epoch, tb_epoch)
-        tb_writer.add_scalar("GT_Loss", loss_gt_epoch, tb_epoch)
         workspace.save_latest(experiment_dir, epoch, model_skel, optimizer_skel)
 
         if epoch % save_epoch == 0:
