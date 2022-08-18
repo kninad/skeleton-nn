@@ -33,7 +33,7 @@ def compute_pc_haussdorff(pts_A, pts_B):
         pts_B: numpy array (M,3) containing the points inferred for the shape
     Returns:
         Scalar (float) value for the symmetric hausdorff dist
-    """    
+    """
     return max(directed_hausdorff(pts_A, pts_B)[0], directed_hausdorff(pts_A, pts_B)[0])
 
 
@@ -131,7 +131,7 @@ def point2sphere_distance_with_batch(p1, p2):
 
     dist = torch.add(p1, torch.neg(p2))
     dist = torch.norm(dist, 2, dim=3)
-
+    # dist is of shape [B, N, M]
     min_dist, min_indice = torch.min(dist, dim=2)
     min_indice = torch.unsqueeze(min_indice, 2)
     min_dist = torch.unsqueeze(min_dist, 2)
@@ -139,9 +139,10 @@ def point2sphere_distance_with_batch(p1, p2):
     p2_min_r = torch.gather(p2_r, 2, min_indice)
     min_dist = min_dist - p2_min_r
     min_dist = torch.norm(min_dist, 2, dim=2)
-
-    dist_scalar = torch.sum(min_dist)
-
+    # Error with earlier code. We were not averaging with the
+    # number of input points (N), instead just summing over.
+    # Hence we first do mean and then sum
+    dist_scalar = torch.sum(torch.mean(min_dist, dim=1))
     return dist_scalar
 
 
@@ -173,13 +174,14 @@ def sphere2point_distance_with_batch(p1, p2):
     min_dist = torch.unsqueeze(min_dist, 2)
     min_dist = min_dist - p1_r
     min_dist = torch.norm(min_dist, 2, dim=2)
-
-    dist_scalar = torch.sum(min_dist)
-
+    # Error with earlier code. We were not averaging with the
+    # number of input points (N), instead just summing over.
+    # Hence we first do mean and then sum
+    dist_scalar = torch.sum(torch.mean(min_dist, dim=1))
     return dist_scalar
 
 
-def modified_sphere2point_distance_with_batch(p1, p2, weight_closest):
+def modified_sphere2point_distance_with_batch(p1, p2, topK=3):
     """
     :param p1: size[B,N,4]
     :param p2: size[B,M,3]
@@ -202,19 +204,15 @@ def modified_sphere2point_distance_with_batch(p1, p2, weight_closest):
     p2 = p2.repeat(1, p1.size(1), 1, 1)
     dist = torch.add(p1, torch.neg(p2))
     dist = torch.norm(dist, 2, dim=3)
+    # dist is a [B, N, M] shape tensor
 
-    # min_dist, min_indice = torch.min(dist, dim=2)
-    min_dist, _ = torch.topk(dist, k=2, dim=2, largest=False)
-    min_dist_1 = min_dist[:, :, :1] - p1_r # first closest point
-    min_dist_2 = min_dist[:, :, 1:] - p1_r # second closest point
-    
-    min_dist_1 = torch.norm(min_dist_1, 2, dim=2)
-    min_dist_2 = torch.norm(min_dist_2, 2, dim=2)
-
-    dist_scalar_1 = torch.sum(min_dist_1)
-    dist_scalar_2 = torch.sum(min_dist_2)
-
-    return weight_closest * dist_scalar_1 + (1 - weight_closest) * dist_scalar_2
+    min_dist, _ = torch.topk(dist, k=topK, dim=2, largest=False)
+    # Dont need the unsqueeze operation on dim=2 since torch.topK
+    # will return a tensor of shape [B, N, K]
+    min_dist = min_dist - p1_r
+    min_dist = torch.norm(min_dist, 2, dim=2)
+    dist_scalar = torch.sum(torch.mean(min_dist, dim=1))
+    return dist_scalar
 
 
 def closest_distance_np(p1, p2, is_sum=True):
