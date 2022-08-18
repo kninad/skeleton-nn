@@ -56,6 +56,28 @@ def compute_metrics_skeletal(batch_id, label_xyz, skel_xyz):
         hd += DF.compute_pc_haussdorff(label_xyz_save[i], skel_xyz_save[i])
     return cd, hd
 
+def implied_boundary_uniform(skel_pts, radii):
+    skel_pnum = skel_pts.shape[0]
+    e = 0.57735027
+    with torch.no_grad():
+        sample_directions = torch.tensor(
+            [
+                [e, e, e],
+                [e, e, -e],
+                [e, -e, e],
+                [e, -e, -e],
+                [-e, e, e],
+                [-e, e, -e],
+                [-e, -e, e],
+                [-e, -e, -e],
+            ]
+        )
+        # sample_directions = torch.unsqueeze(sample_directions, 0)
+        sample_directions = sample_directions.repeat(int(skel_pnum), 1)
+        sample_centers = torch.repeat_interleave(torch.tensor(skel_pts), 8, dim=0)
+        sample_radius = torch.repeat_interleave(torch.tensor(radii), 8, dim=0)
+        sample_xyz = sample_centers + sample_radius * sample_directions
+    return sample_xyz.detach().numpy()
 
 def implied_boundary_single(skel_pts, spoke_dirs, radii):
     """
@@ -82,6 +104,7 @@ def compute_metrics_implied_boundary(batch_id, skel_xyz, skel_r, spoke_xyz, inpu
         pred_bdry = implied_boundary_single(
             skel_xyz_save[i], spoke_xyz_save[i], skel_r_save[i]
         )
+        # pred_bdry = implied_boundary_uniform(skel_xyz_save[i], skel_r_save[i])
         cd += DF.compute_pc_chamfer(input_xyz_save[i], pred_bdry)
         hd += DF.compute_pc_haussdorff(input_xyz_save[i], pred_bdry)
     return cd, hd
@@ -402,8 +425,8 @@ if __name__ == "__main__":
 
 
     test_results(experiment_dir, eval_data, model_skel, 
-        save_results=True, 
-        view_vtk=True,
+        save_results=False, 
+        view_vtk=False,
         srep_res=True,
         if_xml=use_xml_loader
     )
