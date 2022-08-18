@@ -335,7 +335,7 @@ def view_vtk_spokes(srep, mesh, save_f=None):
 def view_vtk_pc(srep_pts, mesh, save_f=None):
     plt = pv.Plotter()
     plt.add_mesh(mesh, color='white', opacity=0.2)
-    plt.add_points(srep_pts, color='white', point_size=2)
+    plt.add_points(srep_pts, color='white', point_size=5)
     if save_f:
         plt.export_vtkjs(save_f)
     else:
